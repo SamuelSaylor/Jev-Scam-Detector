@@ -10,6 +10,6 @@ DEST = Path(__file__).parent / "models"
 
 if __name__ == "__main__":
     DEST.mkdir(exist_ok=True)
-    with urllib.request.urlopen(URL) as response:  # noqa: S310 - fixed https URL
+    with urllib.request.urlopen(URL) as response:
         zipfile.ZipFile(io.BytesIO(response.read())).extractall(DEST)
     print(f"Model ready in {DEST}")
