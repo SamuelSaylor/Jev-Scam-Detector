@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a defect so we can reproduce, fix, and verify it.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the defect.
+      placeholder: "e.g. Requests to create a user return a 500 response."
+    validations:
+      required: true
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behavior
+      description: What actually happens? Include any error messages you see.
+      placeholder: "e.g. The API returns a 500 response with the error shown below."
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should happen instead?
+      placeholder: "e.g. The API should create the user and return a 201 response."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps from a clean state. The goal is for a maintainer to reproduce the bug from your steps alone.
+      placeholder: |
+        1. Start the API with `just dev`
+        2. Send the request, including its method, URL, and body
+        3. Record the response status and body
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, how the API is run, and the branch or commit you're on.
+      placeholder: |
+        - OS: macOS 15
+        - Python: 3.14
+        - How the API is run: `just dev` / container / deployed
+        - Branch / commit: main @ abc1234
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant console, terminal, or server logs. If you have none, write "N/A".
+      render: bash
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or recordings
+      description: Drag and drop images or videos, or paste links to screen recordings that show the problem.
+      placeholder: "Attach screenshots or screen recordings here (drag & drop)."
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      description: Before submitting, confirm you've checked for existing reports.
+      options:
+        - label: This issue is the first open report of this bug.
+          required: true
