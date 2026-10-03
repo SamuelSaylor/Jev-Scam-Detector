@@ -25,3 +25,7 @@ htmlcov/
 .DS_Store
 .vscode/
 .idea/
+
+# Cross-tab demo saved transcripts
+cross-tab-demo/transcripts/
+cross-tab-demo/models/

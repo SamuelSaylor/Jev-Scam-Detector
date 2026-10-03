@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cross-Tab Call Demo</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Cross-Tab Call</h1>
+      <span id="status" class="pill">Not in a room</span>
+    </header>
+
+    <section id="lobby" class="card">
+      <div class="row">
+        <button id="create" class="primary">Create room</button>
+        <span class="muted">or</span>
+        <input id="code" placeholder="Room code" maxlength="5" autocapitalize="characters">
+        <button id="join">Join</button>
+      </div>
+      <details>
+        <summary>Test mode: use an MP3 instead of my microphone</summary>
+        <p class="muted">The file plays into the call as your voice and is transcribed like live speech.</p>
+        <input id="mp3" type="file" accept="audio/mpeg,audio/*">
+      </details>
+      <p id="lobby-error" class="error" hidden></p>
+    </section>
+
+    <section id="call" class="card" hidden>
+      <div class="row between">
+        <div>
+          <div class="muted small">Room code</div>
+          <div class="room-code" id="room-code"></div>
+        </div>
+        <div class="row">
+          <button id="copy">Copy invite link</button>
+          <button id="mute">Mute</button>
+          <button id="leave" class="danger">Leave</button>
+        </div>
+      </div>
+      <p id="peer-state" class="muted">Waiting for the other person to join…</p>
+    </section>
+
+    <section id="feed-card" class="card" hidden>
+      <div class="row between">
+        <h2>Live transcript</h2>
+        <a id="download" class="small" target="_blank" rel="noopener">Download JSON</a>
+      </div>
+      <div id="feed" aria-live="polite"></div>
+      <p id="stt-error" class="error" hidden></p>
+    </section>
+  </main>
+  <audio id="remote" autoplay></audio>
+  <script src="/static/app.js"></script>
+</body>
+</html>
