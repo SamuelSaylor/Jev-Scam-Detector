@@ -1,12 +1,11 @@
 const $ = (id) => document.getElementById(id);
 
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
-const CHUNK_MS = 250; // how often recorded audio is shipped to the server
 
 let ws = null;
 let pc = null;
 let localStream = null;
-let recorder = null;
+let captureCtx = null;
 let audioCtx = null;
 let mp3Element = null;
 let me = null;
@@ -64,15 +63,17 @@ async function getLocalStream() {
   return destination.stream;
 }
 
-function startRecording() {
+async function startRecording() {
   // Each person ships only their own audio, so the server knows exactly who is speaking.
-  const audioOnly = new MediaStream(localStream.getAudioTracks());
-  recorder = new MediaRecorder(audioOnly, { mimeType: "audio/webm;codecs=opus" });
-  recorder.ondataavailable = (e) => {
-    if (e.data.size && ws?.readyState === WebSocket.OPEN) ws.send(e.data);
+  captureCtx = new AudioContext();
+  await captureCtx.audioWorklet.addModule("/static/pcm-worklet.js");
+  const source = captureCtx.createMediaStreamSource(new MediaStream(localStream.getAudioTracks()));
+  const worklet = new AudioWorkletNode(captureCtx, "pcm-worklet");
+  worklet.port.onmessage = (e) => {
+    if (ws?.readyState === WebSocket.OPEN) ws.send(e.data);
   };
+  source.connect(worklet); // not connected to the speakers, so no local echo
   ws.send(JSON.stringify({ type: "start-stt" }));
-  recorder.start(CHUNK_MS);
 }
 
 // ---------- room + signaling ----------
@@ -112,7 +113,7 @@ async function onServerMessage(msg) {
       history.replaceState(null, "", `?room=${roomCode}`);
       msg.history.forEach(addMessage);
       setStatus(`You are Person ${me}`, "live");
-      if (!msg.stt) showError("stt-error", "Transcription is off: set DEEPGRAM_API_KEY on the server.");
+      if (!msg.stt) showError("stt-error", "Transcription is off: the Vosk model is missing on the server (see the README).");
       if (msg.peers.length) $("peer-state").textContent = "Connecting to the other person…";
       startRecording();
       break;
@@ -261,8 +262,8 @@ $("copy").onclick = async () => {
 function leave() {
   const code = roomCode;
   roomCode = null; // stops onclose from reporting an error
-  if (recorder && recorder.state !== "inactive") recorder.stop();
-  recorder = null;
+  captureCtx?.close();
+  captureCtx = null;
   closePeer();
   ws?.close();
   ws = null;

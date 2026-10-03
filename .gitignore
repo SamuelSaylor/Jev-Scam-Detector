@@ -28,3 +28,4 @@ htmlcov/
 
 # Cross-tab demo saved transcripts
 cross-tab-demo/transcripts/
+cross-tab-demo/models/

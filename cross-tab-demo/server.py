@@ -1,8 +1,9 @@
 """Cross-tab call demo: WebRTC signaling plus per-speaker live transcription.
 
 Each browser sends its own microphone (or MP3 test) audio to this server over
-the room WebSocket. The server forwards that audio to Deepgram on a dedicated
-connection, so every transcribed message is attributed to the right person.
+the room WebSocket as 16 kHz mono PCM. The server runs a local, free Vosk
+recognizer per person, so every transcribed message is attributed to the right
+speaker with no paid service involved.
 
 Run from the repo root:  uv run fastapi dev cross-tab-demo/server.py
 """
@@ -11,20 +12,18 @@ import asyncio
 import contextlib
 import json
 import logging
-import os
 import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
-import websockets
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from vosk import KaldiRecognizer, Model, SetLogLevel
 
 HERE = Path(__file__).parent
 load_dotenv(HERE.parent / ".env")
@@ -32,24 +31,28 @@ load_dotenv(HERE / ".env")
 
 log = logging.getLogger("cross-tab-demo")
 
-DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY", "")
-DEEPGRAM_URL = "wss://api.deepgram.com/v1/listen?" + urlencode(
-    {
-        "model": "nova-3",
-        "language": "en",
-        "smart_format": "true",
-        "interim_results": "true",
-        "endpointing": "400",  # ms of silence that closes an utterance
-        "utterance_end_ms": "1000",
-    }
-)
+MODEL_PATH = HERE / "models" / "vosk-model-small-en-us-0.15"
+SAMPLE_RATE = 16000
 TRANSCRIPT_DIR = HERE / "transcripts"
 SLOTS = ("A", "B")
 ROOM_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no look-alike characters
 ROOM_TTL_SECONDS = 2 * 60 * 60  # empty rooms are forgotten after this long
 MAX_MESSAGES_PER_ROOM = 2000
-MAX_QUEUED_CHUNKS = 200  # ~50s of audio at 250ms/chunk; oldest dropped beyond it
-KEEPALIVE_SECONDS = 5
+MAX_QUEUED_CHUNKS = 200  # ~50s of audio; oldest dropped beyond it
+
+SetLogLevel(-1)
+_model: Model | None = None
+
+
+def stt_available() -> bool:
+    return MODEL_PATH.is_dir()
+
+
+def get_model() -> Model:
+    global _model
+    if _model is None:
+        _model = Model(str(MODEL_PATH))
+    return _model
 
 
 def iso_now() -> str:
@@ -106,7 +109,7 @@ class Room:
 
 
 class Transcriber:
-    """One Deepgram streaming connection for one speaker."""
+    """One local Vosk recognizer for one speaker."""
 
     def __init__(self, room: Room, peer: Peer) -> None:
         self.room = room
@@ -114,7 +117,7 @@ class Transcriber:
         self.queue: asyncio.Queue[bytes | None] = asyncio.Queue(
             maxsize=MAX_QUEUED_CHUNKS
         )
-        self.buffer: list[str] = []  # finalized pieces of the utterance in progress
+        self.last_partial = ""
         self.task = asyncio.create_task(self._run())
 
     def push(self, chunk: bytes) -> None:
@@ -124,7 +127,7 @@ class Transcriber:
         self.queue.put_nowait(chunk)
 
     async def close(self) -> None:
-        """Ask Deepgram to flush what it has, then wait briefly for the tail."""
+        """Flush whatever the recognizer still holds, then stop."""
         with contextlib.suppress(asyncio.QueueFull):
             self.queue.put_nowait(None)
         try:
@@ -134,77 +137,47 @@ class Transcriber:
 
     async def _run(self) -> None:
         try:
-            async with websockets.connect(
-                DEEPGRAM_URL,
-                additional_headers={"Authorization": f"Token {DEEPGRAM_API_KEY}"},
-            ) as dg:
-                sender = asyncio.create_task(self._send(dg))
-                keepalive = asyncio.create_task(self._keepalive(dg))
-                try:
-                    await self._receive(dg)
-                finally:
-                    sender.cancel()
-                    keepalive.cancel()
+            recognizer = await asyncio.to_thread(
+                lambda: KaldiRecognizer(get_model(), SAMPLE_RATE)
+            )
+            while (chunk := await self.queue.get()) is not None:
+                # Vosk ends an utterance on its own after a pause in speech.
+                if await asyncio.to_thread(recognizer.AcceptWaveform, chunk):
+                    await self._final(json.loads(recognizer.Result())["text"])
+                else:
+                    await self._partial(
+                        json.loads(recognizer.PartialResult())["partial"]
+                    )
+            await self._final(json.loads(recognizer.FinalResult())["text"])
         except Exception as exc:  # noqa: BLE001 - any failure should surface to the user
-            log.warning("Deepgram connection for %s ended: %s", self.peer.label, exc)
+            log.warning("Transcription for %s ended: %s", self.peer.label, exc)
             with contextlib.suppress(Exception):
                 await self.peer.ws.send_json(
-                    {"type": "stt-error", "detail": "Transcription connection failed."}
+                    {
+                        "type": "stt-error",
+                        "detail": "Transcription failed on the server.",
+                    }
                 )
-        finally:
-            await self._flush()
 
-    async def _send(self, dg: Any) -> None:
-        while (chunk := await self.queue.get()) is not None:
-            await dg.send(chunk)
-        await dg.send(json.dumps({"type": "CloseStream"}))
+    async def _partial(self, text: str) -> None:
+        if text != self.last_partial:
+            self.last_partial = text
+            await self._interim(text)
 
-    async def _keepalive(self, dg: Any) -> None:
-        # Deepgram drops connections that go quiet for ~10s.
-        while True:
-            await asyncio.sleep(KEEPALIVE_SECONDS)
-            await dg.send(json.dumps({"type": "KeepAlive"}))
+    async def _final(self, text: str) -> None:
+        text = text.strip()
+        self.last_partial = ""
+        if text:
+            await self.room.add_message(self.peer, text)
+        await self._interim("")
 
-    async def _receive(self, dg: Any) -> None:
-        async for raw in dg:
-            event = json.loads(raw)
-            kind = event.get("type")
-            if kind == "Results":
-                text = event["channel"]["alternatives"][0]["transcript"].strip()
-                if event.get("is_final"):
-                    if text:
-                        self.buffer.append(text)
-                    if event.get("speech_final"):
-                        await self._flush()
-                    else:
-                        await self._interim("")
-                elif text:
-                    await self._interim(text)
-            elif kind == "UtteranceEnd":
-                await self._flush()
-
-    async def _interim(self, tail: str) -> None:
-        text = " ".join([*self.buffer, tail]).strip()
+    async def _interim(self, text: str) -> None:
         await self.room.broadcast(
             {
                 "type": "interim",
                 "speaker": self.peer.slot,
                 "label": self.peer.label,
                 "text": text,
-            }
-        )
-
-    async def _flush(self) -> None:
-        text = " ".join(self.buffer).strip()
-        self.buffer.clear()
-        if text:
-            await self.room.add_message(self.peer, text)
-        await self.room.broadcast(
-            {
-                "type": "interim",
-                "speaker": self.peer.slot,
-                "label": self.peer.label,
-                "text": "",
             }
         )
 
@@ -233,7 +206,7 @@ async def create_room() -> dict[str, Any]:
     while code in rooms:
         code = "".join(secrets.choice(ROOM_ALPHABET) for _ in range(5))
     rooms[code] = Room(code)
-    return {"code": code, "stt": bool(DEEPGRAM_API_KEY)}
+    return {"code": code, "stt": stt_available()}
 
 
 @app.get("/api/rooms/{code}/transcript")
@@ -263,7 +236,7 @@ async def room_socket(ws: WebSocket, code: str) -> None:
             "you": slot,
             "peers": [s for s in room.peers if s != slot],
             "history": room.transcript,
-            "stt": bool(DEEPGRAM_API_KEY),
+            "stt": stt_available(),
         }
     )
     await room.broadcast({"type": "peer-joined", "peer": slot}, exclude=slot)
@@ -293,11 +266,14 @@ async def handle_text(room: Room, peer: Peer, data: dict[str, Any]) -> None:
             exclude=peer.slot,
         )
     elif kind == "start-stt" and peer.transcriber is None:
-        if DEEPGRAM_API_KEY:
+        if stt_available():
             peer.transcriber = Transcriber(room, peer)
         else:
             await peer.ws.send_json(
-                {"type": "stt-error", "detail": "DEEPGRAM_API_KEY is not set."}
+                {
+                    "type": "stt-error",
+                    "detail": "Vosk model not found in cross-tab-demo/models.",
+                }
             )
 
 
