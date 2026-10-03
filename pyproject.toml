@@ -1,0 +1,26 @@
+[project]
+name = "jev-scam-detector"
+version = "0.1.0"
+description = "A phone call / text scam detector that makes decision via jev live during the phone call"
+readme = "README.md"
+authors = [
+    { name = "Simon Teague", email = "simon@dashf.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "typesafe-sdk>=0.7.2",
+]
+
+[project.scripts]
+jev-scam-detector = "jev_scam_detector:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.40.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
