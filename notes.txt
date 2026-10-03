@@ -1,0 +1,28 @@
+Text -
+google messages
+imessages
+
+|
+v
+
+jev
+
+Email -
+gmail API
+outlook API
+
+|
+v
+
+jev
+
+Phone Call -
+iphone phone app
+google phone app 
+
+|
+v
+live whisper
+|
+v
+jev
