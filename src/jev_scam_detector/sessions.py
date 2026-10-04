@@ -120,7 +120,7 @@ class SessionStore:
                 raise SessionError(503, "capacity_reached", "Session capacity reached")
             now = timestamp()
             room = Room(
-                "sess_" + secrets.token_urlsafe(18),
+                "sesh_" + secrets.token_urlsafe(18),
                 mode,
                 now,
                 now,
