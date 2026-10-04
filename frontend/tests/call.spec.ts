@@ -1,0 +1,172 @@
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+
+async function participant(context: BrowserContext) {
+  const page = await context.newPage();
+  await page.goto("http://127.0.0.1:5173/");
+  return page;
+}
+
+async function remoteTrack(page: Page) {
+  await expect
+    .poll(() =>
+      page.getByLabel("Remote participant audio").evaluate((element) => {
+        if (!(element instanceof HTMLAudioElement)) return false;
+        return (
+          element.srcObject instanceof MediaStream &&
+          element.srcObject.getAudioTracks().length > 0
+        );
+      }),
+    )
+    .toBe(true);
+}
+
+test("two browsers connect audio, review typed lines, then end the shared room", async ({
+  browser,
+}) => {
+  const hostContext = await browser.newContext({ permissions: ["microphone"] });
+  const guestContext = await browser.newContext({
+    permissions: ["microphone"],
+  });
+  try {
+    const host = await participant(hostContext);
+    const guest = await participant(guestContext);
+    await host.getByRole("button", { name: "Create room" }).click();
+    const sessionId = await host
+      .getByLabel("Room ID", { exact: true })
+      .textContent();
+    expect(sessionId).toBeTruthy();
+    await guest.getByLabel("Room ID, if joining").fill(sessionId ?? "");
+    await guest.getByRole("button", { name: "Join room" }).click();
+    await expect(host.getByRole("status")).toContainText(
+      "Audio peer connected",
+    );
+    await expect(guest.getByRole("status")).toContainText(
+      "Audio peer connected",
+    );
+    await guest.getByRole("button", { name: "Reconnect to room" }).click();
+    await expect(host.getByRole("status")).toContainText(
+      "Audio peer connected",
+    );
+    await expect(guest.getByRole("status")).toContainText(
+      "Audio peer connected",
+    );
+    await host.getByRole("button", { name: "Connect microphone" }).click();
+    await guest.getByRole("button", { name: "Connect microphone" }).click();
+    await remoteTrack(host);
+    await remoteTrack(guest);
+    for (const page of [host, guest]) {
+      await expect
+        .poll(() =>
+          page.getByLabel("Remote participant audio").evaluate((element) => {
+            if (
+              !(element instanceof HTMLAudioElement) ||
+              !(element.srcObject instanceof MediaStream)
+            )
+              return false;
+            return element.srcObject
+              .getAudioTracks()
+              .some((track) => track.readyState === "live" && !track.muted);
+          }),
+        )
+        .toBe(true);
+    }
+    await host.getByRole("button", { name: "Mute microphone" }).click();
+    await expect(
+      host.getByRole("button", { name: "Unmute microphone" }),
+    ).toBeVisible();
+    await host.getByRole("button", { name: "Unmute microphone" }).click();
+    await host
+      .getByLabel("Add a line to the shared timeline")
+      .fill("Send the code now");
+    await host.getByRole("button", { name: "Add typed line" }).click();
+    await guest
+      .getByLabel("Add a line to the shared timeline")
+      .fill("I will call the bank myself");
+    await guest.getByRole("button", { name: "Add typed line" }).click();
+    for (const page of [host, guest]) {
+      await expect(
+        page.getByText("Send the code now", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText("I will call the bank myself", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByText("80%", { exact: true })).toBeVisible({
+        timeout: 20000,
+      });
+      await expect(
+        page.getByRole("link", { name: /Send the code now/ }),
+      ).toBeVisible();
+      await expect(page.getByText("Referenced evidence")).toBeVisible();
+    }
+    await guest.getByRole("button", { name: "Reconnect to room" }).click();
+    await expect(host.getByRole("status")).toContainText(
+      "Audio peer connected",
+    );
+    await expect(guest.getByRole("status")).toContainText(
+      "Audio peer connected",
+    );
+    await remoteTrack(host);
+    await remoteTrack(guest);
+    const phone = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 1,
+    });
+    try {
+      const phonePage = await participant(phone);
+      await phonePage.getByRole("button", { name: "Create room" }).click();
+      await expect(
+        phonePage.getByRole("heading", { name: "What the text suggests" }),
+      ).toBeVisible();
+      await phonePage.screenshot({
+        path: "test-results/call-phone.png",
+        fullPage: true,
+        animations: "disabled",
+      });
+      await phonePage
+        .getByRole("button", { name: "End call for everyone" })
+        .click();
+    } finally {
+      await phone.close();
+    }
+    await guest.getByRole("button", { name: "End call for everyone" }).click();
+    await expect(
+      host.getByRole("button", { name: "Create room" }),
+    ).toBeVisible();
+    await expect(
+      guest.getByRole("button", { name: "Create room" }),
+    ).toBeVisible();
+  } finally {
+    await hostContext.close();
+    await guestContext.close();
+  }
+});
+
+test("full room and missing room show recoverable errors", async ({
+  browser,
+}) => {
+  const owner = await browser.newContext();
+  const second = await browser.newContext();
+  const third = await browser.newContext();
+  try {
+    const host = await participant(owner);
+    const guest = await participant(second);
+    const visitor = await participant(third);
+    await visitor.getByLabel("Room ID, if joining").fill("missing-room");
+    await visitor.getByRole("button", { name: "Join room" }).click();
+    await expect(visitor.getByRole("alert")).toContainText(
+      /not found|expired/i,
+    );
+    await host.getByRole("button", { name: "Create room" }).click();
+    const id = await host.getByLabel("Room ID", { exact: true }).textContent();
+    await guest.getByLabel("Room ID, if joining").fill(id ?? "");
+    await guest.getByRole("button", { name: "Join room" }).click();
+    await visitor.getByLabel("Room ID, if joining").fill(id ?? "");
+    await visitor.getByRole("button", { name: "Join room" }).click();
+    await expect(visitor.getByRole("alert")).toContainText(/full|claimed/i);
+    await host.getByRole("button", { name: "End call for everyone" }).click();
+  } finally {
+    await owner.close();
+    await second.close();
+    await third.close();
+  }
+});
