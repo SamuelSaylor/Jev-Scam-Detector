@@ -113,7 +113,7 @@ echo 'Render container healthy and stopped cleanly after SIGTERM'
 port=$(free_port)
 export SMOKE_ORIGIN="http://127.0.0.1:$port"
 compose_env=(FRONTEND_ORIGIN="$SMOKE_ORIGIN" WEB_BIND_ADDRESS=127.0.0.1 WEB_PORT="$port" EMAIL_SCAN_TOKEN=verify-forwarding)
-compose config --format json | uv run python -c 'import json, sys; e = json.load(sys.stdin)["services"]["backend"]["environment"]; assert e["EMAIL_SCAN_TOKEN"] == "verify-forwarding" and not e["OPENAI_API_KEY"] and not e["TYPESAFE_API_KEY"]'
+compose config --format json | uv run python -c 'import json, sys; backend = json.load(sys.stdin)["services"]["backend"]; e = backend["environment"]; assert e["EMAIL_SCAN_TOKEN"] == "verify-forwarding" and not e["OPENAI_API_KEY"] and not e["TYPESAFE_API_KEY"] and backend["stop_signal"] == "SIGINT"'
 compose up --build -d --wait
 wait_for_api
 probe
@@ -123,7 +123,15 @@ for service in backend frontend; do
 done
 ids=$(compose ps -q)
 compose stop -t 10
+shutdown_failed=0
 for id in $ids; do
-    [[ $(docker inspect --format '{{.State.ExitCode}}' "$id") == 0 ]]
+    state=$(docker inspect --format '{{.Name}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{.State.Error}} finished={{.State.FinishedAt}}' "$id")
+    echo "Compose shutdown $state"
+    if [[ $(docker inspect --format '{{.State.ExitCode}}' "$id") != 0 ]]; then
+        docker logs "$id" >&2
+        echo "Unclean Compose shutdown: $state" >&2
+        shutdown_failed=1
+    fi
 done
-echo 'Compose backend and frontend healthy and stopped cleanly after SIGTERM'
+if [[ "$shutdown_failed" != 0 ]]; then exit 1; fi
+echo 'Compose backend and frontend healthy and stopped cleanly'
