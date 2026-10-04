@@ -1,3 +1,4 @@
+# pyright: basic
 """Download the free Vosk English model into cross-tab-demo/models (about 40 MB)."""
 
 import io

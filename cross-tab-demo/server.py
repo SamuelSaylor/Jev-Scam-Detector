@@ -1,3 +1,4 @@
+# pyright: basic
 """Cross-tab call demo: WebRTC signaling plus per-speaker live transcription.
 
 Each browser sends its own microphone (or MP3 test) audio to this server over

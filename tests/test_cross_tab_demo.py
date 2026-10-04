@@ -1,3 +1,4 @@
+# pyright: basic
 import importlib.util
 import sys
 import wave
