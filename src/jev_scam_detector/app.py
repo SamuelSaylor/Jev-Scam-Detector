@@ -98,13 +98,60 @@ demo_assessor: ScamAssessor = DemoAssessor()
 
 
 async def assess_pending() -> None:
-    async def assess(room: Room, snapshot: tuple[Segment, ...]) -> None:
-        async with assessment_slots:
+    capacity_wait_timeout = 5
+
+    async def finish_cleanup(task: asyncio.Task[None]) -> None:
+        # Cleanup must finish even if shutdown cancels the owner again.
+        cancelled = False
+        while True:
+            try:
+                await asyncio.shield(task)
+                break
+            except asyncio.CancelledError:
+                if task.cancelled():
+                    raise
+                cancelled = True
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def assess(room: Room) -> None:
+        reserved = False
+        acquired = False
+
+        async def release() -> None:
+            if acquired:
+                assessment_slots.release()
+            if reserved:
+                async with room.lock:
+                    room.busy = False
+
+        try:
+            async with room.lock:
+                snapshot: tuple[Segment, ...] | None = store.reserve(room)
+                reserved = snapshot is not None
+            if not reserved:
+                return
+            try:
+                async with asyncio.timeout(capacity_wait_timeout):
+                    _ = await assessment_slots.acquire()
+                    acquired = True
+            except TimeoutError:
+                return
+            async with room.lock:
+                if (
+                    room.ended
+                    or not room.segments
+                    or room.cursor == room.segments[-1].id
+                ):
+                    return
+                # Keep busy ownership, but evaluate lines received while queued.
+                snapshot = tuple(room.segments)
             try:
                 assessor = demo_assessor if room.mode == "demo" else live_assessor
                 if assessor is None:
                     raise ValueError("Provider unavailable")
-                decision = await asyncio.wait_for(assessor.assess(snapshot), timeout=15)
+                async with asyncio.timeout(15):
+                    decision = await assessor.assess(snapshot)
             except Exception:  # noqa: BLE001
                 async with room.lock:
                     if not room.ended:
@@ -118,6 +165,8 @@ async def assess_pending() -> None:
                         )
             else:
                 async with room.lock:
+                    if room.ended:
+                        return
                     store.commit(room, snapshot, decision)
                     if room.provider_status["assessment"] != "available":
                         room.provider_status["assessment"] = "available"
@@ -128,19 +177,25 @@ async def assess_pending() -> None:
                                 "status": "available",
                             }
                         )
-            finally:
-                async with room.lock:
-                    room.busy = False
+        finally:
+            if reserved or acquired:
+                await finish_cleanup(asyncio.create_task(release()))
 
     await store.cleanup()
-    jobs: list[asyncio.Task[None]] = []
-    for room in list(store.rooms.values()):
-        async with room.lock:
-            snapshot = store.reserve(room)
-        if snapshot:
-            jobs.append(asyncio.create_task(assess(room, snapshot)))
+    jobs = [asyncio.create_task(assess(room)) for room in list(store.rooms.values())]
     if jobs:
-        _ = await asyncio.gather(*jobs)
+        try:
+            _ = await asyncio.gather(*jobs)
+        except BaseException:
+            for job in jobs:
+                if not job.done():
+                    _ = job.cancel()
+
+            async def drain() -> None:
+                _ = await asyncio.gather(*jobs, return_exceptions=True)
+
+            await finish_cleanup(asyncio.create_task(drain()))
+            raise
 
 
 @asynccontextmanager
