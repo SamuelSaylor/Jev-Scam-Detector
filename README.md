@@ -6,7 +6,7 @@ Created for RowdyHacks 2026 by Samuel Saylor, Simon Teague, Neil Parker, and Nic
 
 ## Run locally
 
-Install [uv](https://docs.astral.sh/uv/), Python 3.14, Node.js 22 with npm, and a current browser. From the repository root, install the locked dependencies:
+Install [uv](https://docs.astral.sh/uv/), Python 3.14, Node.js 22 with npm, and a current browser. From the repository root, install the locked dependencies. If you use `just`, run `just sync` and `just frontend-sync` instead:
 
 ```bash
 uv sync --locked
@@ -25,7 +25,7 @@ Start the frontend in terminal 2:
 npm --prefix frontend run dev
 ```
 
-Open `http://127.0.0.1:5173`. Vite proxies `/api` requests and WebSocket connections to the backend. Keep one backend process running. If port 8000 is occupied, choose a free port, set `API_PORT` to it when starting Vite, and pass the same port to Uvicorn. If you use a different browser origin, set `FRONTEND_ORIGIN` to that exact origin in the backend process.
+Use `just dev` and `just frontend-dev` in separate terminals for the same commands. Set optional keys as process environment variables before starting `just dev`; it does not load `.env`. Open `http://127.0.0.1:5173`. Vite proxies `/api` requests and WebSocket connections to the backend. Keep one backend process running. If port 8000 is occupied, choose a free port, set `API_PORT` to it when starting Vite, and pass the same port to Uvicorn. If you use a different browser origin, set `FRONTEND_ORIGIN` to that exact origin in the backend process.
 
 ## Run with Docker Compose
 
@@ -47,11 +47,11 @@ docker compose down
 
 To change the local port, set `WEB_PORT` and update `FRONTEND_ORIGIN` to the exact browser URL. Recreate containers after changing environment variables with `docker compose up -d`.
 
-For a cloud VM, terminate HTTPS at an external reverse proxy or load balancer and forward requests and WebSocket upgrades to the frontend port. Set `FRONTEND_ORIGIN=https://your-domain.example`. The default port binding accepts only local connections. Use `WEB_BIND_ADDRESS=0.0.0.0` only when an external proxy needs network access, and restrict that port to the proxy with a firewall. Keep exactly one backend instance. These files do not provision a cloud host, certificates, or a CD workflow.
+For a cloud VM, terminate HTTPS at an external reverse proxy or load balancer and forward requests and WebSocket upgrades to the frontend port. Set `FRONTEND_ORIGIN=https://your-domain.example`. The default port binding accepts only local connections. Use `WEB_BIND_ADDRESS=0.0.0.0` only when an external proxy needs network access, and restrict that port to the proxy with a firewall. Keep exactly one backend instance. These files do not provision a cloud host or certificates. The Render CD workflow deploys a separate single-container layout.
 
 ## Deploy on Render
 
-Follow [Deploy the demo on Render](docs/render-deployment.md) to create one Free Docker web service from `render.yaml`. Render serves the built app and API from one HTTPS origin. The service uses one worker and needs no keys for demo mode. Free sleep and redeploy discard active rooms. Check workspace usage and billing before creating the service.
+Follow [Deploy the demo on Render](docs/render-deployment.md) to create one Free Docker web service from `render.yaml` and configure GitHub CD for successful `main` CI pushes. Render serves the built app and API from one HTTPS origin. The service uses one worker and needs no keys for demo mode. Free sleep and redeploy discard active rooms. Check workspace usage and billing before creating the service.
 
 ## Try the two-person no-key demo
 
@@ -84,7 +84,7 @@ cd frontend && npx playwright install --with-deps chromium && cd ..
 bash scripts/verify-browser.sh
 ```
 
-The browser check covers peer audio packets, speaker labels, transcript evidence, room capacity, reconnect, and microphone lifecycle. It uses fake media devices and no paid providers. CI runs the first script on pushes and pull requests; the browser job is available through a manual workflow dispatch.
+The browser check covers peer audio packets, speaker labels, transcript evidence, room capacity, reconnect, and microphone lifecycle. It uses fake media devices and no paid providers. Run `just smoke-containers` to exercise both running Docker layouts with fake credentials. CI runs the source and container checks on `main` pushes and pull requests; the browser job is available through a manual workflow dispatch.
 
 ## Boundaries and project docs
 
