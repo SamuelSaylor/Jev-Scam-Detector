@@ -175,6 +175,7 @@ class SessionStore:
         fingerprint: str,
         started: datetime,
         *,
+        ended: datetime | None = None,
         blank: bool = False,
     ) -> tuple[Segment | None, bool]:
         duplicate, previous = self.receipt(room, role, seq, fingerprint)
@@ -195,7 +196,7 @@ class SessionStore:
                 source,
                 iso(now),
                 room.elapsed(started) if source == "openai" else room.elapsed(now),
-                room.elapsed(now),
+                room.elapsed(ended or now),
             )
         )
         seat.max_seq = seq

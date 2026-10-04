@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+from datetime import timedelta
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from jev_scam_detector import app as backend
+from jev_scam_detector import sessions
 from jev_scam_detector.domain import (
     AssessmentDecision,
     AudioClip,
@@ -92,8 +95,9 @@ def test_contract_examples_and_auth() -> None:
         assert client.get(url, headers=auth(host)).json()["currentRisk"] is None
         asyncio.run(backend.assess_pending())
         view = client.get(url, headers=auth(host)).json()
-        assert view["currentRisk"] == 0.9
-        assert view["assessments"][0]["evidenceSegmentIds"] == [segment.json()["id"]]
+        # The contract's unspecified "code" is not an authentication secret.
+        assert view["currentRisk"] == 0.1
+        assert view["assessments"][0]["evidenceSegmentIds"] == []
         asyncio.run(backend.assess_pending())
         assert len(client.get(url, headers=auth(host)).json()["assessments"]) == 1
         assert (
@@ -296,7 +300,7 @@ def test_silent_clip_and_assessment_retry() -> None:
             _ = client.post(
                 f"{demo_url}/transcripts",
                 headers=auth(demo["participantToken"]),
-                json={"clientSeq": 1, "text": "Send the code"},
+                json={"clientSeq": 1, "text": "Send the verification code"},
             )
             asyncio.run(backend.assess_pending())
             view = client.get(demo_url, headers=auth(demo["participantToken"])).json()
@@ -316,3 +320,77 @@ def test_silent_clip_and_assessment_retry() -> None:
             old_assessor,
             old_demo,
         )
+
+
+def test_audio_capture_time_survives_delayed_transcription(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(backend, "store", SessionStore())
+    monkeypatch.setattr(backend, "live_assessor", BrokenAssessor())
+    with TestClient(backend.app) as client:
+        # Advance the server clock during transcription without a wall-clock sleep.
+        initial = sessions.timestamp()
+        completed = initial + timedelta(seconds=40)
+
+        class DelayedTranscriber:
+            async def transcribe(self, _clip: AudioClip) -> Transcription:
+                await asyncio.sleep(0)
+                monkeypatch.setattr(sessions, "timestamp", lambda: completed)
+                return Transcription("Captured speech")
+
+        monkeypatch.setattr(backend, "transcriber", DelayedTranscriber())
+        live = client.post("/api/sessions", json={"mode": "live"}).json()
+        room = backend.store.rooms[live["sessionId"]]
+        started = room.created + timedelta(seconds=1)
+        ended = started + timedelta(milliseconds=1700)
+        url = f"/api/sessions/{live['sessionId']}"
+        clip = {
+            "audio": (
+                "clip.webm",
+                b"\x1a\x45\xdf\xa3\x82webm\x18\x53\x80\x67" + b"\0" * 20,
+                "audio/webm",
+            )
+        }
+        data = {
+            "clientSeq": "1",
+            "captureStartedAt": started.isoformat(),
+            "captureEndedAt": ended.isoformat(),
+        }
+        response = client.post(
+            f"{url}/audio",
+            headers=auth(live["participantToken"]),
+            data=data,
+            files=clip,
+        )
+        assert response.status_code == 201
+        segment = response.json()
+        assert segment["startMs"] == 1000
+        assert segment["endMs"] == 2700
+        assert segment["createdAt"] == sessions.iso(completed)
+        duplicate = client.post(
+            f"{url}/audio",
+            headers=auth(live["participantToken"]),
+            data=data,
+            files=clip,
+        )
+        assert duplicate.status_code == 200
+        assert duplicate.json() == segment
+        for invalid in (
+            {"captureStartedAt": started.isoformat()},
+            {"captureEndedAt": ended.isoformat()},
+            {
+                "captureStartedAt": ended.isoformat(),
+                "captureEndedAt": started.isoformat(),
+            },
+            {
+                "captureStartedAt": "2026-04-01T00:00:00",
+                "captureEndedAt": "2026-04-01T00:00:05",
+            },
+        ):
+            rejected = client.post(
+                f"{url}/audio",
+                headers=auth(live["participantToken"]),
+                data={"clientSeq": "2", **invalid},
+                files=clip,
+            )
+            assert rejected.status_code == 422

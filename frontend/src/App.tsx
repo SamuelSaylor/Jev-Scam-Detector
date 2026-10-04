@@ -65,7 +65,8 @@ export default function App() {
         onConnection: setConnection,
         onMessage: setMessage,
         onEnd: () => {
-          recorder.current?.stop();
+          void recorder.current?.stop();
+          recorder.current = null;
           room.current?.stop();
           room.current = null;
           setScreen({ kind: "lobby" });
@@ -107,8 +108,7 @@ export default function App() {
 
   function toggleRecording() {
     if (recording) {
-      recorder.current?.stop();
-      recorder.current = null;
+      void recorder.current?.stop();
       setRecording(false);
       return;
     }
@@ -118,11 +118,11 @@ export default function App() {
       );
       return;
     }
-    const next = new ClipRecorder(room.current, (error) => {
-      setMessage(error);
-      setRecording(false);
-      recorder.current = null;
-    });
+    const next =
+      recorder.current ?? new ClipRecorder(room.current, (error) => {
+        setMessage(error);
+        setRecording(false);
+      });
     recorder.current = next;
     try {
       next.start();
@@ -132,7 +132,6 @@ export default function App() {
       setMessage(
         error instanceof Error ? error.message : "Recording is unavailable.",
       );
-      recorder.current = null;
     }
   }
 
@@ -156,11 +155,12 @@ export default function App() {
   async function leave() {
     if (!room.current) return;
     const instance = room.current;
-    recorder.current?.stop();
+    const flushing = recorder.current?.stop();
     recorder.current = null;
     room.current = null;
     setScreen({ kind: "ending" });
     try {
+      await flushing;
       await instance.leave();
     } catch (error) {
       setMessage(

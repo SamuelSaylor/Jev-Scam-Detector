@@ -4,6 +4,7 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime
 from typing import Annotated, ClassVar, Literal, cast
 
 from fastapi import FastAPI, File, Form, Header, Request, UploadFile, WebSocket
@@ -306,6 +307,8 @@ async def audio(
     room_id: str,
     clientSeq: Annotated[int, Form(gt=0)],
     audio: Annotated[UploadFile, File()],
+    captureStartedAt: Annotated[datetime | None, Form()] = None,
+    captureEndedAt: Annotated[datetime | None, Form()] = None,
     authorization: Annotated[str | None, Header()] = None,
 ) -> Response:
     room, role = authorized(room_id, authorization)
@@ -314,6 +317,18 @@ async def audio(
     if audio.content_type != "audio/webm":
         raise SessionError(422, "unsupported_audio", "Unsupported audio")
     started = timestamp()
+    if (captureStartedAt is None) != (captureEndedAt is None):
+        raise SessionError(422, "invalid_input", "Capture timestamps must be paired")
+    if (
+        captureStartedAt is not None
+        and captureEndedAt is not None
+        and (
+            captureStartedAt.utcoffset() is None
+            or captureEndedAt.utcoffset() is None
+            or captureEndedAt < captureStartedAt
+        )
+    ):
+        raise SessionError(422, "invalid_input", "Invalid capture timestamps")
     data = await audio.read(MAX_AUDIO + 1)
     if len(data) > MAX_AUDIO:
         raise SessionError(413, "clip_too_large", "Clip too large")
@@ -369,7 +384,8 @@ async def audio(
                 text,
                 "openai",
                 fingerprint,
-                started,
+                captureStartedAt or started,
+                ended=captureEndedAt,
                 blank=not text,
             )
     finally:
