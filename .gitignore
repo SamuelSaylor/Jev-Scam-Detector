@@ -40,3 +40,6 @@ transcripts/
 .DS_Store
 .vscode/
 .idea/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
