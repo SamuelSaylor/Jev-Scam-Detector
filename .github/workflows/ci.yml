@@ -27,6 +27,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: bash scripts/verify.sh
 
+  container:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.14
+      - run: bash scripts/verify-render.sh
+
   browser:
     if: github.event_name == 'workflow_dispatch' && inputs.browser
     needs: verify

@@ -5,12 +5,15 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, ClassVar, Literal, cast
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Form, Header, Request, UploadFile, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.websockets import WebSocketDisconnect
 
@@ -240,7 +243,35 @@ async def limit_audio_body(
     return await call_next(request)
 
 
-allowed_origin = os.environ.get("FRONTEND_ORIGIN", "http://127.0.0.1:5173")
+def configured_origin(environment: dict[str, str]) -> str:
+    origin = environment.get("FRONTEND_ORIGIN")
+    if origin is None:
+        origin = environment.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5173")
+    parts = urlsplit(origin)
+    try:
+        valid_port = parts.port is None or 0 < parts.port <= 65535
+    except ValueError:
+        valid_port = False
+    if (
+        parts.scheme not in ("http", "https")
+        or not parts.hostname
+        or not valid_port
+        or parts.username is not None
+        or parts.password is not None
+        or parts.path
+        or parts.query
+        or parts.fragment
+        or parts.scheme + "://" + parts.netloc != origin
+        or any(char.isspace() for char in origin)
+        or "%" in parts.netloc
+    ):
+        raise ValueError(
+            "FRONTEND_ORIGIN or RENDER_EXTERNAL_URL must be an absolute HTTP(S) origin"
+        )
+    return origin
+
+
+allowed_origin = configured_origin(dict(os.environ))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[allowed_origin],
@@ -472,6 +503,29 @@ async def sender(websocket: WebSocket, queue: asyncio.Queue[Event]) -> None:
             await websocket.close(code=4404 if event["type"] == "expired" else 4410)
             return
         await websocket.send_json(event)
+
+
+def install_static(site: FastAPI, root: Path) -> None:
+    if not root.is_dir() or not all(
+        (root / filename).is_file() for filename in ("index.html", "config.json")
+    ):
+        raise ValueError("JEV_STATIC_ROOT must contain index.html and config.json")
+
+    site.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
+
+    @site.get("/config.json")
+    async def config() -> FileResponse:
+        return FileResponse(root / "config.json", headers={"Cache-Control": "no-store"})
+
+    @site.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def page(path: str) -> Response:
+        if path == "api" or path.startswith("api/") or "." in path.split("/")[-1]:
+            return Response(status_code=404)
+        return FileResponse(root / "index.html")
+
+
+if "JEV_STATIC_ROOT" in os.environ:
+    install_static(app, Path(os.environ["JEV_STATIC_ROOT"]))
 
 
 @app.websocket("/api/sessions/{room_id}/events")
