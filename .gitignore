@@ -10,6 +10,7 @@ build/
 dist/
 
 # Tool caches and coverage
+/graft/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
