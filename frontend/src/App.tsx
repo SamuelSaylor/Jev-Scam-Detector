@@ -187,23 +187,26 @@ export default function App() {
       <header className="topbar">
         <span className="brand">
           <span className="brand-icon" aria-hidden="true">
-            ◉
-          </span>{" "}
-          jev
+            J
+          </span>
+          <span className="brand-word">
+            <span>Jev Scam Detector</span>
+            <span aria-hidden="true">Jev Scam Detector</span>
+          </span>
         </span>
-        <span className="top-note">A second opinion for a live call</span>
+        <span className="top-note">SECOND OPINION</span>
+        <span className="top-slash" aria-hidden="true" />
       </header>
       {active ? (
         <main className="call-layout">
           <section className="call-header" aria-label="Call details">
-            <div>
-              <p className="context">
-                Private two-person room · {active.member.mode === "demo" ? "Demo mode" : "Live mode"}
+            <div className="title-stack">
+              <p className="context stamp">
+                {active.member.mode === "demo" ? "DEMO" : "LIVE"} · 2 SEATS
               </p>
               <h1>
-                Stay on the line.
-                <br />
-                Stay in control.
+                <span className="title-line">STAY ON</span>
+                <span className="title-line accent">THE LINE</span>
               </h1>
               <p className="subhead">
                 Talk with someone you know. Type what you hear to review it
@@ -211,6 +214,9 @@ export default function App() {
               </p>
             </div>
             <div className="room-ticket">
+              <span className="ticket-stamp" aria-hidden="true">
+                ID
+              </span>
               <span>Room ID to share</span>
               <strong aria-label="Room ID">{active.member.sessionId}</strong>
               <button
@@ -422,9 +428,10 @@ export default function App() {
               </form>
             </div>
             <aside className="risk" aria-labelledby="risk-title">
-              <p className="context">Call review</p>
-              <h2 id="risk-title">What the text suggests</h2>
+              <p className="context stamp">CALL REVIEW</p>
+              <h2 id="risk-title">Text pressure</h2>
               <div className="risk-reading">
+                <span className="risk-slash" aria-hidden="true" />
                 {snapshot?.providerStatus.assessment === "unavailable"
                   ? "Unavailable"
                   : snapshot?.currentRisk === null ||
@@ -493,26 +500,24 @@ export default function App() {
         </main>
       ) : (
         <main className="welcome">
+          <div className="burst" aria-hidden="true" />
           <div className="intro">
-            <span className="signal-art" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
-            </span>
-            <p className="context">A call you can check together</p>
-            <h1>
-              Hear the person.
-              <br />
-              Check the words.
-            </h1>
-            <p>
+            <p className="context stamp">CALL CHECK</p>
+            <div className="title-stack">
+              <span className="ghost-copy" aria-hidden="true">
+                CHECK
+              </span>
+              <h1>
+                <span className="title-line">CATCHING SCAMMERS</span>
+                <span className="title-line accent live">LIVE!</span>
+              </h1>
+            </div>
+            <p className="lede">
               Make a private room for two people. Talk through your browsers,
               then add lines to a shared five-second timeline.
             </p>
             <div className="demo-note">
-              <strong>No API keys? Start in demo mode.</strong>
+              <strong>No keys? Demo mode.</strong>
               <span>
                 Typed text works without microphone permission. A sample rule
                 reviews it every five seconds.
@@ -520,7 +525,7 @@ export default function App() {
             </div>
           </div>
           <form className="entry" onSubmit={(event) => void join(event)}>
-            <h2>Start or join a call</h2>
+            <h2>Start or join</h2>
             <fieldset>
               <legend>Review mode</legend>
               <label>
