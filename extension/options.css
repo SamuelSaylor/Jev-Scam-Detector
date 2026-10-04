@@ -14,8 +14,22 @@ main {
   box-shadow: 8px 8px 0 #ff0000;
 }
 
+header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+#logo {
+  height: 56px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+}
+
 h1 {
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .note,

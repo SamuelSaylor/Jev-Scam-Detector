@@ -1,4 +1,4 @@
-// Adds a "Scan with Jev" button to an open Gmail thread. Nothing is read or sent
+// Adds a "Scan with Jev Scam Detector" button to an open Gmail thread. Nothing is read or sent
 // until the user clicks it and confirms. Email text is untrusted: everything we
 // render uses textContent, never innerHTML.
 
@@ -22,6 +22,14 @@ const el = (tag, className, text) => {
 
 let bar = null;
 let output = null; // holds the result banner under the bar
+
+// The logo is icons/icon48.png; replace that file to change it everywhere.
+function logo() {
+  const image = el("img", "jev-logo");
+  image.src = chrome.runtime.getURL("icons/icon48.png");
+  image.alt = "Jev Scam Detector";
+  return image;
+}
 
 // ---------- reading the thread ----------
 
@@ -66,13 +74,14 @@ function confirmScan(serverUrl, lineCount) {
     actions.append(cancel, scan);
     const plural = lineCount === 1 ? "" : "s";
     dialog.append(
-      el("h2", "", "Scan this email with Jev?"),
+      logo(),
+      el("h2", "", "Scan this email with Jev Scam Detector?"),
       el(
         "p",
         "",
         `${lineCount} line${plural} of text from the open email will be sent to ${serverUrl} to be checked. Quoted replies and signatures are left out.`,
       ),
-      el("p", "jev-small", "Jev gives an estimate from the wording. It cannot confirm whether an email is real."),
+      el("p", "jev-small", "Jev Scam Detector gives an estimate from the wording. It cannot confirm whether an email is real."),
       actions,
     );
     overlay.append(dialog);
@@ -133,15 +142,15 @@ function showResult(data, lines) {
   const banner = el("div", `jev-banner jev-${level}`);
   const head = el("div", "jev-head");
   const close = el("button", "jev-close", "×");
-  close.setAttribute("aria-label", "Dismiss Jev result");
+  close.setAttribute("aria-label", "Dismiss Jev Scam Detector result");
   close.onclick = clearResult;
   head.append(el("strong", "jev-label", `${label} · ${percent}%`), close);
   banner.append(head);
 
   const caveat =
     data.provider === "jev"
-      ? "Jev's estimate of whether this email asks for a code, a money transfer or skipped verification. It is not a verdict."
-      : "Demo mode: a simple keyword rule, not Jev. Set TYPESAFE_API_KEY on the server for real checks.";
+      ? "Jev Scam Detector's estimate of whether this email asks for a code, a money transfer or skipped verification. It is not a verdict."
+      : "Demo mode: a simple keyword rule, not the live check. Set TYPESAFE_API_KEY on the server for real checks.";
   banner.append(el("p", "jev-small", caveat));
 
   if (flagged.length) {
@@ -170,7 +179,7 @@ async function run(button) {
   JevLines.clear(document.body);
   const lines = collect();
   if (!lines.length) {
-    showMessage("Jev could not find any readable text in the open email.", "info");
+    showMessage("Jev Scam Detector could not find any readable text in the open email.", "info");
     return;
   }
   const { serverUrl } = await chrome.storage.local.get({ serverUrl: DEFAULT_SERVER });
@@ -181,20 +190,20 @@ async function run(button) {
 
   button.disabled = true;
   button.textContent = "Scanning…";
-  showMessage("Asking Jev…", "info");
+  showMessage("Asking Jev Scam Detector…", "info");
   try {
     const reply = await chrome.runtime.sendMessage({
       type: "jev-scan",
       lines: lines.map(({ id, sender, text }) => ({ id, sender, text })),
     });
     if (!reply?.ok) showMessage(reply?.error ?? "The scan failed.", "error");
-    else if (!valid(reply.data)) showMessage("The server sent a reply Jev could not understand.", "error");
+    else if (!valid(reply.data)) showMessage("The server sent a reply Jev Scam Detector could not understand.", "error");
     else showResult(reply.data, lines);
   } catch {
     showMessage("The extension was reloaded. Refresh this Gmail tab and try again.", "error");
   } finally {
     button.disabled = false;
-    button.textContent = "Scan with Jev";
+    button.textContent = "Scan with Jev Scam Detector";
   }
 }
 
@@ -203,11 +212,11 @@ async function run(button) {
 function inject(anchor) {
   bar = el("div", "jev-ui jev-bar");
   bar.dataset.thread = location.hash;
-  const button = el("button", "jev-btn jev-primary", "Scan with Jev");
+  const button = el("button", "jev-btn jev-primary", "Scan with Jev Scam Detector");
   button.onclick = () => void run(button);
   output = el("div", "jev-output");
   output.setAttribute("aria-live", "polite");
-  bar.append(button, el("span", "jev-small", "Checks this email for requests for codes or money"), output);
+  bar.append(logo(), button, el("span", "jev-small", "Checks this email for requests for codes or money"), output);
   anchor.parentElement.insertBefore(bar, anchor);
 }
 

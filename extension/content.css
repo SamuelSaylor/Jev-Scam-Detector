@@ -12,6 +12,18 @@
   flex-basis: 100%;
 }
 
+.jev-logo {
+  height: 28px;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+.jev-dialog .jev-logo {
+  height: 40px;
+  margin-bottom: 8px;
+}
+
 .jev-small {
   margin: 0;
   font-size: 12px;

@@ -54,8 +54,8 @@ $("test").onclick = async () => {
   try {
     const response = await fetch(`${url.origin}/api/health`);
     const body = await response.json();
-    if (body.status === "ok") say(`Connected to Jev server v${body.version}.`, "ok");
-    else say("The server answered, but it does not look like a Jev server.", "bad");
+    if (body.status === "ok") say(`Connected to Jev Scam Detector server v${body.version}.`, "ok");
+    else say("The server answered, but it does not look like a Jev Scam Detector server.", "bad");
   } catch {
     say("Could not reach the server. Is it running, and has its URL been saved?", "bad");
   }
