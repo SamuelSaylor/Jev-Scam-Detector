@@ -1,0 +1,170 @@
+.jev-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 16px;
+  font: 14px/1.4 "Google Sans", Roboto, Arial, sans-serif;
+  color: #202124;
+}
+
+.jev-output {
+  flex-basis: 100%;
+}
+
+.jev-logo {
+  height: 28px;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+.jev-dialog .jev-logo {
+  height: 40px;
+  margin-bottom: 8px;
+}
+
+.jev-small {
+  margin: 0;
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.jev-btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 7px 16px;
+  border: 2px solid #000;
+  border-radius: 6px;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+}
+
+.jev-btn:hover:not(:disabled) {
+  box-shadow: 2px 2px 0 #000;
+}
+
+.jev-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.jev-primary {
+  background: #ff0000;
+  color: #fff;
+}
+
+.jev-banner {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: 2px solid #000;
+  border-left-width: 8px;
+  border-radius: 6px;
+  background: #fff;
+  color: #202124;
+  box-shadow: 3px 3px 0 #000;
+}
+
+.jev-banner p {
+  margin: 4px 0;
+}
+
+.jev-high {
+  border-left-color: #ff0000;
+}
+
+.jev-medium {
+  border-left-color: #ffb300;
+}
+
+.jev-low {
+  border-left-color: #19c463;
+}
+
+.jev-error {
+  border-left-color: #ff0000;
+  color: #b00000;
+}
+
+.jev-info {
+  border-left-color: #5f6368;
+}
+
+.jev-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jev-high .jev-label {
+  color: #ff0000;
+}
+
+.jev-close,
+.jev-link {
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.jev-close {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.jev-evidence {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.jev-link {
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+
+mark.jev-flag {
+  background: #ffe600;
+  color: #000;
+  box-shadow: 0 0 0 2px #ff0000;
+  border-radius: 2px;
+}
+
+.jev-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.55);
+  font: 14px/1.5 "Google Sans", Roboto, Arial, sans-serif;
+}
+
+.jev-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 20px;
+  background: #fff;
+  color: #202124;
+  border: 3px solid #000;
+  border-radius: 8px;
+  box-shadow: 6px 6px 0 #ff0000;
+}
+
+.jev-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.jev-dialog p {
+  margin: 0 0 8px;
+}
+
+.jev-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}

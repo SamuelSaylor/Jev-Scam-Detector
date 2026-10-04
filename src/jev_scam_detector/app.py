@@ -21,12 +21,14 @@ from jev_scam_detector.domain import (
     Segment,
     Transcriber,
 )
+from jev_scam_detector.email_scan import EmailScan, result, to_segments
 from jev_scam_detector.providers import DemoAssessor, JevAssessor, OpenAITranscriber
 from jev_scam_detector.sessions import (
     Event,
     Room,
     SessionError,
     SessionStore,
+    iso,
     timestamp,
 )
 
@@ -213,6 +215,25 @@ def authorized(
     if room.ended and not allow_ended:
         raise SessionError(404, "session_not_found", "Session not found")
     return room, role
+
+
+@app.post("/api/emails/scan")
+async def scan_email(
+    body: EmailScan, authorization: Annotated[str | None, Header()] = None
+) -> dict[str, object]:
+    token = os.environ.get("EMAIL_SCAN_TOKEN")
+    if token and authorization != f"Bearer {token}":
+        raise SessionError(401, "invalid_token", "Invalid token")
+    assessor = live_assessor or demo_assessor
+    segments = to_segments(body, iso(timestamp()))
+    try:
+        async with assessment_slots:
+            decision = await asyncio.wait_for(assessor.assess(segments), timeout=15)
+        return result(decision, segments, "jev" if live_assessor else "demo-rule")
+    except Exception:  # noqa: BLE001
+        raise SessionError(
+            503, "provider_unavailable", "Provider unavailable"
+        ) from None
 
 
 @app.get("/api/health")

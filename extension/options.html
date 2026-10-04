@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Jev Scam Detector settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <img id="logo" src="icons/icon128.png" alt="">
+        <h1>Jev Scam Detector</h1>
+      </header>
+      <p class="note">
+        The extension sends the text of an email to your Jev Scam Detector server only after you
+        click <strong>Scan with Jev Scam Detector</strong> in Gmail and confirm.
+      </p>
+
+      <label for="server">Server URL</label>
+      <input id="server" type="url" placeholder="http://127.0.0.1:8000" spellcheck="false">
+
+      <label for="token">
+        Access token
+        <span class="optional">(only if the server sets EMAIL_SCAN_TOKEN)</span>
+      </label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false">
+
+      <div class="row">
+        <button id="save" class="primary">Save</button>
+        <button id="test">Test connection</button>
+      </div>
+      <p id="status" role="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
