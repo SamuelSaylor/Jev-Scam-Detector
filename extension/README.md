@@ -1,12 +1,12 @@
-# Jev Email Scanner (Chrome extension)
+# Jev Scam Detector for Gmail (Chrome extension)
 
-Adds a **Scan with Jev** button to an open Gmail email. It checks the email the same
-way the call room checks a live conversation: each line goes to Jev as the question
+Adds a **Scan with Jev Scam Detector** button to an open Gmail email. It checks the email the same
+way the call room checks a live conversation: each line goes to the Jev model as the question
 "does this ask for a code, a money transfer, or a way around independent
 verification?", and the extension shows an overall risk and highlights the lines
 that look like the request.
 
-Jev gives an estimate from wording. It is not a verdict, and a low score does not
+Jev Scam Detector gives an estimate from wording. It is not a verdict, and a low score does not
 prove an email is safe. The evidence threshold is unvalidated (see
 `docs/architecture.md`).
 
@@ -18,7 +18,7 @@ prove an email is safe. The evidence threshold is unvalidated (see
      `transfer`) and the banner says so.
 2. Open `chrome://extensions`, switch on **Developer mode**, click **Load unpacked**,
    and choose this `extension/` folder.
-3. Open Gmail, open an email, and click **Scan with Jev**. A prompt asks you to
+3. Open Gmail, open an email, and click **Scan with Jev Scam Detector**. A prompt asks you to
    confirm before anything is sent.
 
 The default server is `http://127.0.0.1:8000`. To use another server, click the
@@ -27,7 +27,7 @@ permission to reach that host). Remote servers must use `https://`.
 
 ## What gets sent
 
-Only after you click **Scan with Jev** and confirm, the extension sends up to 30 short
+Only after you click **Scan with Jev Scam Detector** and confirm, the extension sends up to 30 short
 lines (500 characters each at most) from the open thread to your server, along with
 each sender's address. The newest messages are used first. Quoted replies and
 signatures are left out. The server does not store the text. The Typesafe key stays on
@@ -66,3 +66,11 @@ returns 503 (never a safe score).
 - Collapsed messages in a long thread are not scanned until you expand them.
 - Highlights mark whole text pieces, not exact words.
 - Text only: attachments, images and links are not checked.
+
+## Logo
+
+The logo is `icons/icon16.png`, `icons/icon48.png` and `icons/icon128.png`. Replace
+those three files (same names) with your artwork: `16` is the toolbar and tab icon,
+`48` appears in Gmail next to the button and in the confirmation prompt, and `128`
+appears on the settings page and the Chrome extensions page. Reload the extension at
+`chrome://extensions` afterward. No code changes are needed.

@@ -1,4 +1,4 @@
-// Sends scan requests to the Jev server. This runs here, not in the Gmail page,
+// Sends scan requests to the Jev Scam Detector server. This runs here, not in the Gmail page,
 // so the page never sees the server URL or token and CORS does not apply.
 const DEFAULTS = { serverUrl: "http://127.0.0.1:8000", token: "" };
 const TIMEOUT_MS = 25000;
@@ -16,7 +16,7 @@ function describe(status, body) {
   const code = body?.error?.code;
   if (status === 401) return "The server rejected the access token. Check it in the extension settings.";
   if (status === 422) return "The server could not read this email. It may be too large.";
-  if (code === "provider_unavailable") return "Jev could not be reached by the server. Try again in a moment.";
+  if (code === "provider_unavailable") return "The server could not complete the check. Try again in a moment.";
   return `The server returned an error (${status}).`;
 }
 
@@ -39,7 +39,7 @@ async function scan(lines) {
     if (!response.ok) return { ok: false, error: describe(response.status, body) };
     return { ok: true, data: body };
   } catch {
-    return { ok: false, error: `Could not reach the Jev server at ${serverUrl}. Is it running?` };
+    return { ok: false, error: `Could not reach the Jev Scam Detector server at ${serverUrl}. Is it running?` };
   } finally {
     clearTimeout(timer);
   }
