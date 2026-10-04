@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, ClassVar, Literal, cast
 
@@ -30,6 +31,8 @@ from jev_scam_detector.sessions import (
 )
 
 MAX_AUDIO = 2 * 1024 * 1024
+MAX_MULTIPART = MAX_AUDIO + 16 * 1024
+assessment_slots = asyncio.Semaphore(4)
 
 
 class Strict(BaseModel):
@@ -92,26 +95,13 @@ demo_assessor: ScamAssessor = DemoAssessor()
 
 
 async def assess_pending() -> None:
-    semaphore = asyncio.Semaphore(4)
-
     async def assess(room: Room, snapshot: tuple[Segment, ...]) -> None:
-        async with semaphore:
+        async with assessment_slots:
             try:
                 assessor = demo_assessor if room.mode == "demo" else live_assessor
                 if assessor is None:
                     raise ValueError("Provider unavailable")
                 decision = await asyncio.wait_for(assessor.assess(snapshot), timeout=15)
-                async with room.lock:
-                    store.commit(room, snapshot, decision)
-                    if room.provider_status["assessment"] != "available":
-                        room.provider_status["assessment"] = "available"
-                        room.emit(
-                            {
-                                "type": "provider_status",
-                                "provider": "assessment",
-                                "status": "available",
-                            }
-                        )
             except Exception:  # noqa: BLE001
                 async with room.lock:
                     if not room.ended:
@@ -121,6 +111,18 @@ async def assess_pending() -> None:
                                 "type": "provider_status",
                                 "provider": "assessment",
                                 "status": "unavailable",
+                            }
+                        )
+            else:
+                async with room.lock:
+                    store.commit(room, snapshot, decision)
+                    if room.provider_status["assessment"] != "available":
+                        room.provider_status["assessment"] = "available"
+                        room.emit(
+                            {
+                                "type": "provider_status",
+                                "provider": "assessment",
+                                "status": "available",
                             }
                         )
             finally:
@@ -140,10 +142,14 @@ async def assess_pending() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    pending: set[asyncio.Task[None]] = set()
+
     async def loop() -> None:
         while True:
             await asyncio.sleep(5)
-            await assess_pending()
+            job = asyncio.create_task(assess_pending())
+            pending.add(job)
+            job.add_done_callback(pending.discard)
 
     task = asyncio.create_task(loop())
     try:
@@ -152,9 +158,30 @@ async def lifespan(_app: FastAPI):
         _ = task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        for job in pending:
+            _ = job.cancel()
+        if pending:
+            _ = await asyncio.gather(*pending, return_exceptions=True)
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def limit_audio_body(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    if request.method == "POST" and request.url.path.endswith("/audio"):
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > MAX_MULTIPART:
+                return error(413, "clip_too_large", "Clip too large")
+
+        request._body = bytes(body)  # pyright: ignore[reportPrivateUsage]
+    return await call_next(request)
+
+
 allowed_origin = os.environ.get("FRONTEND_ORIGIN", "http://127.0.0.1:5173")
 app.add_middleware(
     CORSMiddleware,

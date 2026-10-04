@@ -88,13 +88,16 @@ export default function App() {
   }
 
   async function connectMicrophone() {
-    if (!room.current) return;
+    const active = room.current;
+    if (!active) return;
     setMicrophone("requesting");
     try {
-      await room.current.startMicrophone();
+      await active.startMicrophone();
+      if (room.current !== active || !active.stream) return;
       setMicrophone("on");
       setMessage("");
     } catch {
+      if (room.current !== active) return;
       setMicrophone("denied");
       setMessage(
         "Microphone access was denied or unavailable. You can still use typed text.",

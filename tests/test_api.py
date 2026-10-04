@@ -144,6 +144,24 @@ def test_invalid_inputs_and_live_provider_requirement() -> None:
         )
 
 
+def test_oversized_multipart_rejected_before_file_parsing() -> None:
+    backend.store = SessionStore()
+    with TestClient(backend.app) as client:
+        room, token, _ = setup(client)
+        result = client.post(
+            f"/api/sessions/{room}/audio",
+            headers=auth(token),
+            data={"clientSeq": "1"},
+            files={
+                "audio": ("clip.webm", b"x" * (backend.MAX_MULTIPART + 1), "audio/webm")
+            },
+        )
+        assert result.status_code == 413
+        assert result.json() == {
+            "error": {"code": "clip_too_large", "message": "Clip too large"}
+        }
+
+
 def test_websocket_signal_and_invalid_auth() -> None:
     backend.store = SessionStore()
     with TestClient(backend.app) as client:

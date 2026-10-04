@@ -4,7 +4,6 @@ default:
 sync:
     uv sync --locked
 
-# Start one in-memory session worker. No reload or additional worker processes.
 dev:
     uv run uvicorn jev_scam_detector.app:app --host 127.0.0.1 --port 8000
 

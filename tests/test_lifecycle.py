@@ -1,9 +1,9 @@
-# pyright: reportAny=false
-
 import asyncio
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
+from pytest import MonkeyPatch
 
 from jev_scam_detector import app as backend
 from jev_scam_detector.domain import AssessmentDecision, Segment
@@ -53,6 +53,70 @@ def test_assessments_do_not_overlap_and_new_lines_wait() -> None:
     asyncio.run(scenario())
 
 
+def test_slow_rooms_do_not_delay_later_assessment_ticks() -> None:
+    async def scenario() -> None:
+        original, backend.demo_assessor = backend.demo_assessor, HoldingAssessor()
+        holding = backend.demo_assessor
+        backend.store = SessionStore()
+        for index in range(8):
+            room, _ = await backend.store.create("demo")
+            _ = backend.store.append(
+                room,
+                "host",
+                1,
+                f"line {index}",
+                "manual",
+                f"manual:{index}",
+                timestamp(),
+            )
+        try:
+            async with backend.lifespan(backend.app):
+                _ = await asyncio.wait_for(holding.started.wait(), timeout=7)
+                ninth, _ = await backend.store.create("demo")
+                _ = backend.store.append(
+                    ninth, "host", 1, "new line", "manual", "manual:new", timestamp()
+                )
+                await asyncio.sleep(5.3)
+                assert ninth.busy is True
+                assert holding.calls == 4
+                _ = holding.release.set()
+        finally:
+            backend.demo_assessor = original
+
+    asyncio.run(scenario())
+
+
+def test_local_commit_failure_is_not_reported_as_provider_outage(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        original, backend.demo_assessor = backend.demo_assessor, HoldingAssessor()
+        holding = backend.demo_assessor
+        backend.store = SessionStore()
+        room, _ = await backend.store.create("demo")
+        _ = backend.store.append(
+            room, "host", 1, "hello", "manual", "manual:hello", timestamp()
+        )
+
+        def fail_commit(*_args: object) -> None:
+            raise RuntimeError("local commit failed")
+
+        monkeypatch.setattr(backend.store, "commit", fail_commit)
+        _ = holding.release.set()
+        try:
+            try:
+                await backend.assess_pending()
+                assert False, "local failure must propagate"
+            except RuntimeError as exc:
+                assert str(exc) == "local commit failed"
+            assert room.provider_status["assessment"] == "available"
+            assert room.busy is False
+        finally:
+            backend.demo_assessor = original
+
+    asyncio.run(scenario())
+
+
 def test_capacity_expiration_and_sequence_bounds() -> None:
     async def scenario() -> None:
         store = SessionStore()
@@ -93,7 +157,9 @@ def test_capacity_expiration_and_sequence_bounds() -> None:
 def test_socket_replacement_closes_old_connection() -> None:
     backend.store = SessionStore()
     with TestClient(backend.app) as client:
-        session = client.post("/api/sessions", json={"mode": "demo"}).json()
+        session = TypeAdapter(dict[str, str]).validate_json(
+            client.post("/api/sessions", json={"mode": "demo"}).content
+        )
         url = f"/api/sessions/{session['sessionId']}/events"
         origin = {"origin": "http://127.0.0.1:5173"}
         with client.websocket_connect(url, headers=origin) as original:

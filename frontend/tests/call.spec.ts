@@ -3,6 +3,8 @@ import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 declare global {
   interface Window {
     __peers: RTCPeerConnection[];
+    __releaseMic?: () => void;
+    __micTrack?: MediaStreamTrack;
   }
 }
 
@@ -59,6 +61,63 @@ async function remoteTrack(page: Page) {
     )
     .toBe(true);
 }
+
+test("browser produces a closed WebM clip", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5173/");
+  const clip = await page.evaluate(async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    try {
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      const parts: Blob[] = [];
+      recorder.ondataavailable = (event) => parts.push(event.data);
+      const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+      recorder.start();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      recorder.stop();
+      await stopped;
+      const blob = new Blob(parts, { type: "audio/webm" });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { size: blob.size, mime: blob.type, header: [...bytes.slice(0, 4)] };
+    } finally {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+  });
+  expect(clip.mime).toBe("audio/webm");
+  expect(clip.header).toEqual([26, 69, 223, 163]);
+  expect(clip.size).toBeGreaterThan(100);
+});
+
+test("late microphone permission cannot enable a later call", async ({ browser }) => {
+  const context = await browser.newContext({ permissions: ["microphone"] });
+  await context.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) =>
+      new Promise<MediaStream>((resolve, reject) => {
+        window.__releaseMic = () => {
+          original(constraints).then((stream) => {
+            window.__micTrack = stream.getAudioTracks()[0];
+            resolve(stream);
+          }, reject);
+        };
+      });
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("http://127.0.0.1:5173/");
+    await page.getByRole("button", { name: "Create room" }).click();
+    await page.getByRole("button", { name: "Connect microphone" }).click();
+    await expect(page.getByRole("button", { name: "Requesting microphone" })).toBeVisible();
+    await page.getByRole("button", { name: "End call for everyone" }).click();
+    await expect(page.getByRole("button", { name: "Create room" })).toBeVisible();
+    await page.getByRole("button", { name: "Create room" }).click();
+    await page.evaluate(() => window.__releaseMic?.());
+    await expect.poll(() => page.evaluate(() => window.__micTrack?.readyState)).toBe("ended");
+    await expect(page.getByRole("button", { name: "Connect microphone" })).toBeVisible();
+    await expect(page.locator(".people .person").first()).toContainText("Microphone off");
+  } finally {
+    await context.close();
+  }
+});
 
 test("two browsers connect audio, review typed lines, then end the shared room", async ({
   browser,
