@@ -11,6 +11,7 @@ declare global {
     __peers: RTCPeerConnection[];
     __releaseMic?: () => void;
     __micTrack?: MediaStreamTrack;
+    __toneContexts?: AudioContext[];
   }
 }
 
@@ -65,6 +66,40 @@ async function inboundAudio(page: Page) {
         }
         return false;
       }),
+    )
+    .toBe(true);
+}
+
+async function inboundSound(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        for (const peer of window.__peers) {
+          if (peer.connectionState !== "connected") continue;
+          const stats = await peer.getStats();
+          for (const report of stats.values()) {
+            if (
+              report.type === "inbound-rtp" &&
+              report.kind === "audio" &&
+              report.totalAudioEnergy > 0
+            ) return true;
+          }
+        }
+        return false;
+      }),
+    )
+    .toBe(true);
+}
+
+async function playingAudio(page: Page) {
+  await expect
+    .poll(() =>
+      page.getByLabel("Remote participant audio").evaluate((element) =>
+        element instanceof HTMLAudioElement &&
+        !element.paused &&
+        element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        element.currentTime > 0,
+      ),
     )
     .toBe(true);
 }
@@ -194,6 +229,8 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     await remoteTrack(guest);
     await inboundAudio(host);
     await inboundAudio(guest);
+    await playingAudio(host);
+    await playingAudio(guest);
     for (const page of [host, guest]) {
       await expect
         .poll(() =>
@@ -274,6 +311,8 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     await remoteTrack(guest);
     await inboundAudio(host);
     await inboundAudio(guest);
+    await playingAudio(host);
+    await playingAudio(guest);
     const phone = await browser.newContext({
       viewport: { width: 390, height: 844 },
       deviceScaleFactor: 1,
@@ -319,6 +358,81 @@ test("two browsers connect audio, review typed lines, then end the shared room",
   } finally {
     await hostContext.close();
     await guestContext.close();
+  }
+});
+
+test("blocked autoplay offers a gesture to restore two-way playback", async ({ browser }) => {
+  const hostContext = await browser.newContext({ permissions: ["microphone"] });
+  const guestContext = await browser.newContext({ permissions: ["microphone"] });
+  for (const context of [hostContext, guestContext]) {
+    await context.addInitScript(() => {
+      window.__toneContexts = [];
+      navigator.mediaDevices.getUserMedia = async () => {
+        const audio = new AudioContext();
+        const tone = audio.createOscillator();
+        const stream = audio.createMediaStreamDestination();
+        tone.frequency.value = 440;
+        tone.connect(stream);
+        tone.start();
+        await audio.resume();
+        window.__toneContexts?.push(audio);
+        return stream.stream;
+      };
+      const nativePlay = HTMLMediaElement.prototype.play;
+      let speakerGesture = false;
+      document.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (
+            event.target instanceof HTMLElement &&
+            event.target
+              .closest("button")
+              ?.textContent?.includes("Tap to hear audio")
+          )
+            speakerGesture = true;
+        },
+        true,
+      );
+      HTMLMediaElement.prototype.play = function () {
+        if (!speakerGesture) {
+          return Promise.reject(new DOMException("User gesture required", "NotAllowedError"));
+        }
+        return nativePlay.call(this);
+      };
+      new MutationObserver(() => {
+        document.querySelectorAll("audio[autoplay]").forEach((audio) => {
+          audio.removeAttribute("autoplay");
+        });
+      }).observe(document, { childList: true, subtree: true });
+    });
+  }
+  try {
+    const host = await participant(hostContext);
+    const guest = await participant(guestContext);
+    const sessionId = await createDemo(host);
+    await guest.getByLabel("Room ID, if joining").fill(sessionId);
+    await guest.getByRole("button", { name: "Join room" }).click();
+    await host.getByRole("button", { name: "Connect microphone" }).click();
+    await guest.getByRole("button", { name: "Connect microphone" }).click();
+    await remoteTrack(host);
+    await remoteTrack(guest);
+    await inboundAudio(host);
+    await inboundAudio(guest);
+    for (const page of [host, guest]) {
+      await expect(page.getByLabel("Remote participant audio")).toHaveJSProperty(
+        "paused",
+        true,
+      );
+      await expect(
+        page.getByRole("button", { name: "Tap to hear audio" }),
+      ).toBeVisible({ timeout: 3000 });
+      await page.getByRole("button", { name: "Tap to hear audio" }).click();
+      await playingAudio(page);
+    }
+    await inboundSound(host);
+    await inboundSound(guest);
+  } finally {
+    await Promise.allSettled([hostContext.close(), guestContext.close()]);
   }
 });
 

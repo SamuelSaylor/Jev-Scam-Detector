@@ -24,6 +24,7 @@ export default function App() {
   >("waiting");
   const [microphone, setMicrophone] = useState<Microphone>("off");
   const [recording, setRecording] = useState(false);
+  const [speakerBlocked, setSpeakerBlocked] = useState(false);
   const [sending, setSending] = useState(false);
   const room = useRef<Room | null>(null);
   const recorder = useRef<ClipRecorder | null>(null);
@@ -38,8 +39,21 @@ export default function App() {
     [],
   );
 
+  function playRemoteAudio() {
+    const audio = remoteAudio.current;
+    if (!audio) return;
+    void audio.play().then(
+      () => setSpeakerBlocked(false),
+      () => {
+        if (remoteAudio.current === audio && audio.srcObject && audio.paused)
+          setSpeakerBlocked(true);
+      },
+    );
+  }
+
   async function join(sessionId?: string) {
     setMessage("");
+    setSpeakerBlocked(false);
     setScreen({ kind: "joining" });
     try {
       const member = await enter("live", sessionId);
@@ -52,7 +66,10 @@ export default function App() {
               : current,
           ),
         onAudio: (stream) => {
-          if (remoteAudio.current) remoteAudio.current.srcObject = stream;
+          if (!remoteAudio.current) return;
+          remoteAudio.current.srcObject = stream;
+          setSpeakerBlocked(false);
+          if (stream) playRemoteAudio();
         },
         onConnection: setConnection,
         onMessage: setMessage,
@@ -67,6 +84,7 @@ export default function App() {
           setConnection("waiting");
           setMicrophone("off");
           setRecording(false);
+          setSpeakerBlocked(false);
         },
       });
       room.current = instance;
@@ -284,6 +302,11 @@ export default function App() {
                 playsInline
                 aria-label="Remote participant audio"
               />
+              {speakerBlocked && (
+                <button type="button" onClick={playRemoteAudio}>
+                  Tap to hear audio
+                </button>
+              )}
               <div className="controls">
                 {microphone === "off" || microphone === "denied" ? (
                   <button
