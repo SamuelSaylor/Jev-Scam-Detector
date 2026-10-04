@@ -13,8 +13,23 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.basedpyright/
 .coverage
 htmlcov/
+
+# Frontend dependencies and local browser artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+playwright-report/
+test-results/
+
+# Local transcripts and recordings
+*.webm
+*.wav
+*.mp3
+transcripts/
 
 # Local secrets
 .env

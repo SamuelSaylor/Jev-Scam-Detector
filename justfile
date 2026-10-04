@@ -1,31 +1,28 @@
-# List available recipes
 default:
     @just --list
-# Install dependencies
+
 sync:
-    uv sync
-# Run fastapi in development mode
+    uv sync --locked
+
 dev:
-    uv run fastapi dev
-# Run fastapi in production mode
-prod:
-    uv run fastapi run
-# Run the test suite
-test:
-    uv run python -m pytest
-# Format code with ruff
-format:
-    uv run ruff format .
-# Check linting rules
+    uv run uvicorn jev_scam_detector.app:app --host 127.0.0.1 --port 8000
+
+verify:
+    bash scripts/verify.sh
+
+verify-browser:
+    bash scripts/verify-browser.sh
+
 lint:
     uv run ruff check .
-# Apply safe lint fixes
-lint-fix:
-    uv run ruff check --fix .
-# Run static type checking
+
+format:
+    uv run ruff format .
+
 typecheck:
     uv run basedpyright
-# Check formatting, linting, typechecks, and test suite
-check: lint typecheck test
-    uv run ruff format --check .
-    echo "All checks passed!"
+
+test:
+    uv run pytest
+
+check: verify
