@@ -40,6 +40,8 @@ The full retained transcript is assessed rather than only the most recent 20 lin
 
 ## Suspicion and confidence
 
+Live mode also uses a `Choice` to identify the possible dominant scam pattern from the same ordered transcript and context rules. The options and exclusions are defined in `src/jev_scam_detector/scam_types.py`. Benign conversations, insufficient context, and other or mixed schemes have explicit options. This classification does not alter suspicion, indicators, evidence thresholds, or summaries. Its confidence is separate from suspicion confidence. Existing research checkpoints have no scam-type gold labels; mocked mapping tests do not establish classification accuracy.
+
 Live mode uses an ordered `Score` rubric for low, moderate, and high suspicion. Its probability-weighted score is divided by 2 and stored in the historical `risk` field. This is a normalized suspicion score, not a calibrated chance of fraud.
 
 The display bands are low below 0.35, moderate from 0.35 to below 0.7, and high from 0.7. These defaults require evaluation on representative labeled conversations. They do not authorize any action.

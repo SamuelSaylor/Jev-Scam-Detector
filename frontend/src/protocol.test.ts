@@ -70,6 +70,8 @@ describe("wire event boundary", () => {
     ).toThrow();
     for (const invalid of [
       { ...assessment, confidence: 1.1 },
+      { ...assessment, scamType: "invented" },
+      { ...assessment, scamTypeConfidence: 1.1 },
       { ...assessment, indicators: ["invented"] },
       { ...assessment, summary: "" },
     ]) {

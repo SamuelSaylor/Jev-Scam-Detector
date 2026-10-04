@@ -159,6 +159,12 @@ def test_jev_uses_contextual_rubric_and_preserves_actual_sdk_confidence(
             assert model == "jev-latest"
             captured.append((state, questions))
             answers: dict[str, object] = {
+                "scam_type": {
+                    "type": "choice",
+                    "choice": "credential_theft",
+                    "confidence": 0.8,
+                    "probabilities": {"credential_theft": 1.0},
+                },
                 "conversation_suspicion": {
                     "type": "score",
                     "score": 1.8,

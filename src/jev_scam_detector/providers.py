@@ -5,7 +5,14 @@ import re
 
 import httpx
 from pydantic import BaseModel
-from typesafe_sdk import AsyncTypeSafeClient, Noul, NoulCriteria, Question, Score
+from typesafe_sdk import (
+    AsyncTypeSafeClient,
+    Choice,
+    Noul,
+    NoulCriteria,
+    Question,
+    Score,
+)
 
 from jev_scam_detector.domain import (
     AssessmentDecision,
@@ -19,6 +26,11 @@ from jev_scam_detector.scam_criteria import (
     CONTEXT_RULES,
     CRITERIA,
     SUSPICION_RUBRIC,
+)
+from jev_scam_detector.scam_types import (
+    SCAM_TYPE_CRITERIA,
+    ScamClassification,
+    ScamType,
 )
 
 UNVALIDATED_EXAMPLE_EVIDENCE_THRESHOLD = 0.7
@@ -115,6 +127,15 @@ class JevAssessor:
     async def assess(self, segments: tuple[Segment, ...]) -> AssessmentDecision:
         policy = "Apply `evaluationPolicy` and interpret `warningSigns` using the full ordered `segments`."
         questions: dict[str, Question] = {
+            "scam_type": Choice(
+                instructions=(
+                    "Which possible scam pattern best explains the observable transcript? "
+                    + "Select the dominant scheme, not just a tactic, and use no_apparent_scam, "
+                    + "insufficient_context or other_mixed when appropriate. A possible pattern "
+                    + f"is not proof of fraud. {policy}"
+                ),
+                criteria=SCAM_TYPE_CRITERIA,
+            ),
             "conversation_suspicion": Score(
                 instructions=f"How suspicious is this conversation for a scam? {policy}",
                 criteria=list(SUSPICION_RUBRIC),
@@ -159,7 +180,10 @@ class JevAssessor:
             )
         judgment = response.scores["conversation_suspicion"]
         risk = judgment.score / (len(SUSPICION_RUBRIC) - 1)
-        values = [risk, judgment.confidence]
+        classification = response.choices["scam_type"]
+        scam_type = ScamType(classification.choice)
+        values = [risk, judgment.confidence, classification.confidence]
+        values.extend(classification.probabilities.values())
         values.extend(
             response.nouls[name].noul
             for name, question in questions.items()
@@ -180,5 +204,9 @@ class JevAssessor:
             >= UNVALIDATED_EXAMPLE_EVIDENCE_THRESHOLD
         )
         return AssessmentDecision(
-            risk, evidence, judgment.confidence, indicators if evidence else ()
+            risk,
+            evidence,
+            judgment.confidence,
+            indicators if evidence else (),
+            ScamClassification(scam_type, classification.confidence),
         )

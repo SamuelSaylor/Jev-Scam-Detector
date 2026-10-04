@@ -1,6 +1,8 @@
-# API contract, version 0.3.0
+# API contract, version 0.4.0
 
 This reference fixes the independent backend and frontend wire format. JSON fields use camelCase. Request and response bodies have exactly the fields shown; reject unknown input fields with 422. IDs are opaque strings. Timestamps are UTC RFC 3339 strings with `Z`; relative times are nonnegative integer milliseconds since server `createdAt` for the session. The server stamps receipt time and derives `startMs` and `endMs`; manual segments have equal bounds. For audio, the bounds cover server upload receipt through completed transcription, not exact spoken-word timing. Segment order follows server append order. `clientSeq` is a positive integer scoped to the participant and session, shared by text and audio submissions. The browser increments it for each new submission and retains it for retries. The server returns the prior segment for the same speaker and sequence and identical request fingerprint, even after later sequences; conflicting reuse returns 409. The fingerprint for manual input uses the original submitted text, before trimming. Lower unseen sequences return 409. Audio fingerprint is MIME and full file digest; check dedupe before a second provider call. Sequence gaps are allowed. All success and error JSON use `Content-Type: application/json` except 204.
+
+Live assessments include a contextual `Choice` classification in the same Jev request as suspicion and evidence. `scamType` identifies a possible dominant scheme, not a confirmed scam. `scamTypeConfidence` is classification confidence, independent of suspicion confidence and not a fraud probability. Demo assessments return null for both. The frontend accepts older assessments without these fields and hides classification before the first successful review or during a provider failure. While newer transcript lines await review, the previous score, classification, and evidence remain visible with an explicit updating note. The next successful assessment replaces them together.
 
 ## Common types
 
@@ -21,6 +23,10 @@ type Assessment = {
   indicators: ('credentials' | 'payment' | 'impersonation' | 'urgency' | 'secrecy' |
     'remote_access' | 'upfront_fee' | 'reward' | 'story_change' | 'persistence')[];
   summary: string;
+  scamType: 'credential_theft' | 'tech_support_refund' | 'payment_diversion' |
+    'task_job' | 'advance_fee_prize' | 'investment' | 'no_apparent_scam' |
+    'insufficient_context' | 'other_mixed' | null;
+  scamTypeConfidence: number | null;
   evidenceSegmentIds: string[]; throughSegmentId: string;
   createdAt: string; startMs: number; endMs: number;
 };
@@ -41,7 +47,7 @@ All session URLs use `/api/sessions/{sessionId}` with the literal session ID URL
 
 | Method and URL | Request | Success |
 | --- | --- | --- |
-| `GET /api/health` | No body or token. | 200 `{"status":"ok","version":"0.3.0"}`. |
+| `GET /api/health` | No body or token. | 200 `{"status":"ok","version":"0.4.0"}`. |
 | `POST /api/sessions` | JSON `{"mode":"demo"}` or `{"mode":"live"}`. | 201 `{"sessionId":"...","participantToken":"...","role":"host","mode":"demo"}`. |
 | `POST /api/sessions/{sessionId}/join` | JSON `{}`. | 201 `{"sessionId":"...","participantToken":"...","role":"guest","mode":"demo"}`. |
 | `GET /api/sessions/{sessionId}` | Bearer token, no body. | 200 `Snapshot`. |

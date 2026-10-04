@@ -1,5 +1,25 @@
 # Verification
 
+## Retained meter while updating
+
+The frontend keeps the latest successful score, classification, and evidence visible while newer transcript lines await assessment, including reconnect snapshots that temporarily clear `currentRisk`. An updating note identifies the retained review. A new successful assessment replaces the result without removing the meter marker. Provider failures still show the unavailable state, and no score appears before the first successful review.
+
+Frontend TypeScript checks, 21 unit tests, and the production build passed. Three mocked browser tests passed at desktop and mobile widths. The browser checks confirm that rapid transcript arrivals preserve the same marker DOM node and position, and a subsequent assessment updates its position and removes the note. No live or paid provider request ran.
+
+## Contextual scam classification, version 0.4.0
+
+Accepted the incoming call-workspace merge resolutions, then added a contextual Jev `Choice` in the existing assessment request. No live or paid provider request ran. The installed SDK definitions supplied the integration contract; no external documentation request ran.
+
+Verified locally:
+
+- Ruff lint and formatting passed; BasedPyright reported zero errors and warnings.
+- Frontend TypeScript checks, 15 unit tests, and the production build passed.
+- Three mocked browser tests passed, including classification rendering at desktop and mobile widths and hiding classification after failed or stale reviews.
+- The full Python suite had 227 passes and 10 demo research failures. Running the original HEAD `DemoAssessor` against the same fixtures reproduced exactly those 10 failures. They remain failures, without relaxed gold expectations.
+- Classification mapping tests cover every option, separate confidence, invalid judgments, snapshot serialization, null demo classification, and no demo fallback on service failure.
+
+The research corpus has no scam-type gold expectations. These checks verify integration, not live classification accuracy.
+
 ## Scam assessments, version 0.3.0
 
 Verified locally on `feat/scam-assessment-criteria`.

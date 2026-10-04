@@ -15,6 +15,28 @@ const segment = z
     endMs: z.number().int().nonnegative(),
   })
   .strict();
+export const scamType = z.enum([
+  "credential_theft",
+  "tech_support_refund",
+  "payment_diversion",
+  "task_job",
+  "advance_fee_prize",
+  "investment",
+  "no_apparent_scam",
+  "insufficient_context",
+  "other_mixed",
+]);
+export const scamTypeLabels = {
+  credential_theft: "Credential theft",
+  tech_support_refund: "Tech support / refund scam",
+  payment_diversion: "Payment diversion",
+  task_job: "Task / job scam",
+  advance_fee_prize: "Advance-fee / prize scam",
+  investment: "Investment scam",
+  no_apparent_scam: "No apparent scam",
+  insufficient_context: "Insufficient context",
+  other_mixed: "Other / mixed pattern",
+} satisfies Record<z.infer<typeof scamType>, string>;
 const assessment = z
   .object({
     id: z.string(),
@@ -39,6 +61,8 @@ const assessment = z
       ]),
     ),
     summary: z.string().min(1).max(400),
+    scamType: scamType.nullable().optional(),
+    scamTypeConfidence: z.number().finite().min(0).max(1).nullable().optional(),
     evidenceSegmentIds: z.array(z.string()),
     throughSegmentId: z.string(),
     createdAt: z.string().datetime(),

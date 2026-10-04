@@ -233,6 +233,12 @@ class SessionStore:
             )
         ):
             raise ValueError("Invalid provider decision")
+        classification = decision.classification
+        if classification is not None and (
+            not math.isfinite(classification.confidence)
+            or not 0 <= classification.confidence <= 1
+        ):
+            raise ValueError("Invalid provider classification")
         if room.ended:
             return
         now = timestamp()
@@ -246,6 +252,8 @@ class SessionStore:
             "suspicionLevel": suspicion_level(decision.risk),
             "indicators": list(decision.indicators),
             "summary": suspicion_summary(decision.risk, decision.indicators),
+            "scamType": classification.scam_type.value if classification else None,
+            "scamTypeConfidence": classification.confidence if classification else None,
             "evidenceSegmentIds": list(decision.evidence_segment_ids),
             "throughSegmentId": snapshot[-1].id,
             "createdAt": iso(now),

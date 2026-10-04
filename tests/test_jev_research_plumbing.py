@@ -14,11 +14,16 @@ from collections.abc import Mapping
 from typing import Self
 
 import pytest
-from typesafe_sdk import Noul, Question, Score, SystemOneResponse
+from typesafe_sdk import Choice, Noul, Question, Score, SystemOneResponse
 
 from jev_scam_detector.domain import Indicator
 from jev_scam_detector.providers import JevAssessor
 from jev_scam_detector.scam_criteria import CONTEXT_RULES, CRITERIA, SUSPICION_RUBRIC
+from jev_scam_detector.scam_types import (
+    SCAM_TYPE_CRITERIA,
+    ScamClassification,
+    ScamType,
+)
 
 from .research_scam_cases import (
     CASE_IDS,
@@ -56,6 +61,12 @@ def test_jev_research_prefix_request_and_mocked_answer_mapping(
             # These are stipulated answers, not an inference engine.
             is_high = checkpoint.level == "high"
             answers: dict[str, object] = {
+                "scam_type": {
+                    "type": "choice",
+                    "choice": "insufficient_context",
+                    "confidence": 0.6,
+                    "probabilities": {"insufficient_context": 1.0},
+                },
                 "conversation_suspicion": {
                     "type": "score",
                     "score": 1.8 if is_high else 0.2,
@@ -96,6 +107,10 @@ def test_jev_research_prefix_request_and_mocked_answer_mapping(
     decision = asyncio.run(JevAssessor("research-test-key").assess(segments))
     assert_expectations(decision, segments, checkpoint)
     assert decision.confidence == 0.7
+    # Stipulated classification for mapping only, not research type gold.
+    assert decision.classification == ScamClassification(
+        ScamType.INSUFFICIENT_CONTEXT, 0.6
+    )
     assert decision.risk == pytest.approx(0.9 if checkpoint.level == "high" else 0.1)
     assert len(captured) == 1
     state, questions = captured[0]
@@ -110,9 +125,15 @@ def test_jev_research_prefix_request_and_mocked_answer_mapping(
     # original host/guest attribution and fragment boundaries are preserved.
     assert set(questions) == {
         "conversation_suspicion",
+        "scam_type",
         *(f"indicator_{indicator}" for indicator in Indicator),
         *(f"line_{i}" for i in range(len(segments))),
     }
+    classification = questions["scam_type"]
+    assert isinstance(classification, Choice)
+    serialized_choice = json.loads(classification.model_dump_json())
+    assert serialized_choice["criteria"] == SCAM_TYPE_CRITERIA
+    assert "full ordered `segments`" in serialized_choice["instructions"]
     suspicion = questions["conversation_suspicion"]
     assert isinstance(suspicion, Score)
     serialized_suspicion = json.loads(suspicion.model_dump_json())

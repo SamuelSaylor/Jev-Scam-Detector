@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from jev_scam_detector.scam_types import ScamClassification
+
 Role = Literal["host", "guest"]
 Mode = Literal["demo", "live"]
 
@@ -63,6 +65,7 @@ class AssessmentDecision:
     evidence_segment_ids: tuple[str, ...]
     confidence: float | None = None
     indicators: tuple[Indicator, ...] = ()
+    classification: ScamClassification | None = None
 
 
 class Transcriber(Protocol):

@@ -3,6 +3,9 @@ import { enter } from "./api";
 import { ClipRecorder } from "./recorder";
 import { Room } from "./room";
 import type { Membership, Snapshot } from "./protocol";
+import { Transcript, type TranscriptHandle } from "./Transcript";
+import { Assessment } from "./Assessment";
+import { assessmentView } from "./assessment-view";
 
 type Screen =
   | { kind: "lobby" }
@@ -11,20 +14,9 @@ type Screen =
   | { kind: "ending" };
 type Microphone = "off" | "requesting" | "on" | "muted" | "denied";
 
-function elapsed(milliseconds: number) {
-  const seconds = Math.floor(milliseconds / 1000);
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function interval(milliseconds: number) {
-  const start = Math.floor(milliseconds / 5000) * 5000;
-  return `${elapsed(start)}–${elapsed(start + 5000)}`;
-}
-
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "lobby" });
   const [sessionInput, setSessionInput] = useState("");
-  const [mode, setMode] = useState<"demo" | "live">("demo");
   const [text, setText] = useState("");
   const [message, setMessage] = useState("");
   const [connection, setConnection] = useState<
@@ -36,6 +28,7 @@ export default function App() {
   const room = useRef<Room | null>(null);
   const recorder = useRef<ClipRecorder | null>(null);
   const remoteAudio = useRef<HTMLAudioElement | null>(null);
+  const transcript = useRef<TranscriptHandle>(null);
 
   useEffect(
     () => () => {
@@ -45,12 +38,11 @@ export default function App() {
     [],
   );
 
-  async function join(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function join(sessionId?: string) {
     setMessage("");
     setScreen({ kind: "joining" });
     try {
-      const member = await enter(mode, sessionInput.trim() || undefined);
+      const member = await enter("live", sessionId);
       const instance = new Room(member, {
         onSnapshot: (snapshot) =>
           setScreen((current) =>
@@ -65,7 +57,7 @@ export default function App() {
         onConnection: setConnection,
         onMessage: setMessage,
         onEnd: () => {
-          void recorder.current?.stop();
+          recorder.current?.stop();
           recorder.current = null;
           room.current?.stop();
           room.current = null;
@@ -80,6 +72,7 @@ export default function App() {
       room.current = instance;
       setScreen({ kind: "call", member, snapshot: null });
       void instance.open();
+      if (member.mode === "live") void connectMicrophone();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Cannot enter the room.",
@@ -97,6 +90,7 @@ export default function App() {
       if (room.current !== active || !active.stream) return;
       setMicrophone("on");
       setMessage("");
+      if (active.member.mode === "live") startRecording(active);
     } catch {
       if (room.current !== active) return;
       setMicrophone("denied");
@@ -108,30 +102,39 @@ export default function App() {
 
   function toggleRecording() {
     if (recording) {
-      void recorder.current?.stop();
+      recorder.current?.stop();
+      recorder.current = null;
       setRecording(false);
       return;
     }
-    if (!room.current || !ClipRecorder.supported() || !room.current.stream) {
+    if (room.current) startRecording(room.current);
+  }
+
+  function startRecording(active: Room) {
+    if (recorder.current || room.current !== active) return;
+    if (!ClipRecorder.supported() || !active.stream) {
       setMessage(
         "Connect a microphone in a supported browser to transcribe live audio. Typed text still works.",
       );
       return;
     }
-    const next =
-      recorder.current ?? new ClipRecorder(room.current, (error) => {
-        setMessage(error);
-        setRecording(false);
-      });
+    const next = new ClipRecorder(active, (error) => {
+      if (room.current !== active || recorder.current !== next) return;
+      setMessage(error);
+      setRecording(false);
+      recorder.current = null;
+    });
     recorder.current = next;
     try {
       next.start();
       setRecording(true);
       setMessage("");
     } catch (error) {
+      void next.stop();
       setMessage(
         error instanceof Error ? error.message : "Recording is unavailable.",
       );
+      recorder.current = null;
     }
   }
 
@@ -155,12 +158,11 @@ export default function App() {
   async function leave() {
     if (!room.current) return;
     const instance = room.current;
-    const flushing = recorder.current?.stop();
+    recorder.current?.stop();
     recorder.current = null;
     room.current = null;
     setScreen({ kind: "ending" });
     try {
-      await flushing;
       await instance.leave();
     } catch (error) {
       setMessage(
@@ -179,48 +181,24 @@ export default function App() {
 
   const active = screen.kind === "call" ? screen : null;
   const snapshot = active?.snapshot;
-  const latest = snapshot?.assessments.at(-1);
-  const assessmentFailed = snapshot?.providerStatus.assessment === "unavailable";
-  const assessmentPending =
-    snapshot?.segments.at(-1)?.id !== latest?.throughSegmentId;
-  const evidence = new Set(latest?.evidenceSegmentIds ?? []);
+  const review = assessmentView(snapshot ?? null);
 
   return (
     <div className="shell">
       <header className="topbar">
         <span className="brand">
-          <span className="brand-icon" aria-hidden="true">
-            J
-          </span>
+          <img className="brand-logo" src="/logo.png" alt="" />
           <span className="brand-word">
             <span>Jev Scam Detector</span>
             <span aria-hidden="true">Jev Scam Detector</span>
           </span>
         </span>
-        <span className="top-note">SECOND OPINION</span>
         <span className="top-slash" aria-hidden="true" />
       </header>
       {active ? (
         <main className="call-layout">
           <section className="call-header" aria-label="Call details">
-            <div className="title-stack">
-              <p className="context stamp">
-                {active.member.mode === "demo" ? "DEMO" : "LIVE"} · 2 SEATS
-              </p>
-              <h1>
-                <span className="title-line">STAY ON</span>
-                <span className="title-line accent">THE LINE</span>
-              </h1>
-              <p className="subhead">
-                Talk with someone you know. Type what you hear to review it
-                together.
-              </p>
-            </div>
             <div className="room-ticket">
-              <span className="ticket-stamp" aria-hidden="true">
-                ID
-              </span>
-              <span>Room ID to share</span>
               <strong aria-label="Room ID">{active.member.sessionId}</strong>
               <button
                 type="button"
@@ -233,9 +211,6 @@ export default function App() {
               >
                 Copy room ID
               </button>
-              <small>
-                Share this ID only. Never share a participant token.
-              </small>
             </div>
           </section>
           {message && (
@@ -252,15 +227,23 @@ export default function App() {
                   </span>
                   <div>
                     <strong>You</strong>
-                    <span>
-                      {active.member.role === "host" ? "Host" : "Guest"} ·{" "}
-                      {microphone === "on"
-                        ? "Microphone on"
-                        : microphone === "muted"
-                          ? "Muted"
-                          : microphone === "denied"
-                            ? "Microphone unavailable"
-                            : "Microphone off"}
+                    <span
+                      className="mic-state"
+                      role="img"
+                      aria-label={`Microphone ${microphone}`}
+                      title={`Microphone ${microphone}`}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        {microphone === "requesting" ? (
+                          <circle cx="12" cy="12" r="8" strokeDasharray="3 3" />
+                        ) : (
+                          <>
+                            <rect x="9" y="2" width="6" height="12" rx="3" />
+                            <path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" />
+                            {microphone !== "on" && <path d="M3 3l18 18" />}
+                          </>
+                        )}
+                      </svg>
                     </span>
                   </div>
                 </div>
@@ -287,10 +270,6 @@ export default function App() {
                 {connection === "connected"
                   ? "Audio peer connected"
                   : `Audio peer ${connection}`}{" "}
-                ·{" "}
-                {snapshot?.peer.connected
-                  ? "Both browsers in room"
-                  : "Waiting for the other browser"}{" "}
                 <button
                   className="reconnect"
                   type="button"
@@ -353,66 +332,29 @@ export default function App() {
                   End call for everyone
                 </button>
               </div>
-              <p className="privacy">
-                {active.member.mode === "demo"
-                  ? "Demo mode. Microphone audio goes only to the other browser if you connect it. No microphone audio is uploaded or transcribed."
-                  : "Live mode. Audio is uploaded in complete five-second clips only when you start live transcription."}
-              </p>
-              <section className="transcript" aria-labelledby="timeline-title">
-                <div className="section-heading">
-                  <div>
-                    <p className="context">Shared record</p>
-                    <h2 id="timeline-title">Five-second timeline</h2>
-                  </div>
-                  <span>{snapshot?.segments.length ?? 0} lines</span>
-                </div>
-                {snapshot?.segments.length ? (
-                  <ol className="timeline">
-                    {snapshot.segments.map((segment) => (
-                      <li
-                        key={segment.id}
-                        id={`segment-${segment.id}`}
-                        className={
-                          evidence.has(segment.id) ? "evidence-line" : ""
-                        }
-                      >
-                        <time>{interval(segment.startMs)}</time>
-                        <div>
-                          <span className="speaker">
-                            {segment.speaker === active.member.role
-                              ? "You"
-                              : segment.speaker === "host"
-                                ? "Host"
-                                : "Guest"}{" "}
-                            ·{" "}
-                            {segment.source === "manual"
-                              ? "typed"
-                              : "transcribed"}
-                          </span>
-                          <p>{segment.text}</p>
-                          {evidence.has(segment.id) && (
-                            <span className="evidence-tag">
-                              Referenced evidence
-                            </span>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="empty">
-                    No lines yet. Add a typed line below. Both people will see
-                    it.
+              {active.member.mode === "live" &&
+                snapshot?.providerStatus.transcription === "unavailable" && (
+                  <p className="privacy" role="status">
+                    Transcription provider unavailable. Typed lines still work.
                   </p>
                 )}
-              </section>
+            </div>
+            <div className="conversation">
+              <Transcript
+                ref={transcript}
+                segments={snapshot?.segments ?? []}
+                role={active.member.role}
+                evidenceIds={
+                  review.kind === "ready"
+                    ? review.evidence.map((line) => line.id)
+                    : []
+                }
+              />
               <form
                 className="text-form"
                 onSubmit={(event) => void submit(event)}
               >
-                <label htmlFor="typed-line">
-                  Add a line to the shared timeline
-                </label>
+                <label htmlFor="typed-line">Add a typed line</label>
                 <div>
                   <input
                     id="typed-line"
@@ -425,170 +367,67 @@ export default function App() {
                     Add typed line
                   </button>
                 </div>
-                <small>
-                  Manual text is labeled as typed, never as a recording.
-                </small>
               </form>
             </div>
-            <aside className="risk" aria-labelledby="risk-title">
-              <p className="context stamp">CALL REVIEW</p>
-              <h2 id="risk-title">Scam suspicion</h2>
-              <div className="risk-reading" aria-live="polite" aria-atomic="true">
-                <span className="risk-slash" aria-hidden="true" />
-                {latest
-                  ? `${latest.suspicionLevel.charAt(0).toUpperCase()}${latest.suspicionLevel.slice(1)}`
-                  : "Awaiting assessment"}
-              </div>
-              {latest && (
-                <p className="judgment-confidence">
-                  {latest.confidence === null
-                    ? `Demo suspicion score: ${Math.round(latest.risk * 100)} / 100`
-                    : `${Math.round(latest.confidence * 100)}% judgment confidence`}
-                </p>
-              )}
-              {latest && <p className="suspicion-summary">{latest.summary}</p>}
-              {assessmentFailed ? (
-                <small className="assessment-note warning">
-                  {latest
-                    ? "Review failed. Showing the previous assessment; newer lines may not be covered."
-                    : "Review failed. No successful assessment yet."}
-                </small>
-              ) : assessmentPending ? (
-                <small className="assessment-note">
-                  {latest
-                    ? "Updating. Showing the previous assessment."
-                    : "Awaiting the first five-second review."}
-                </small>
-              ) : null}
-              <p>
-                {active.member.mode === "demo"
-                  ? "Rule-based demo, not Jev confidence or a verified scam verdict."
-                  : "Jev confidence describes certainty in its text judgment, not the probability of a scam or verified caller identity."}
-              </p>
-              {latest && (
-                <div className="evidence">
-                  <h3>Evidence in this review</h3>
-                  {latest.evidenceSegmentIds.length ? (
-                    <ul>
-                      {latest.evidenceSegmentIds.map((id) => {
-                        const segment = snapshot?.segments.find(
-                          (item) => item.id === id,
-                        );
-                        return segment ? (
-                          <li key={id}>
-                            <a href={`#segment-${id}`}>
-                              {segment.speaker === active.member.role
-                                ? "Your"
-                                : "Other participant’s"}{" "}
-                              line at {elapsed(segment.startMs)}: “
-                              {segment.text}”
-                            </a>
-                          </li>
-                        ) : null;
-                      })}
-                    </ul>
-                  ) : (
-                    <p>
-                      No lines cited in the latest review. This does not
-                      establish safety.
-                    </p>
-                  )}
-                </div>
-              )}
-              <div className="guidance">
-                <strong>If anything feels wrong</strong>
-                <p>
-                  Pause the call. Find the organization’s number yourself from a
-                  trusted source and call it independently. Do not share codes
-                  or send money based on this call.
-                </p>
-              </div>
-            </aside>
+            <Assessment
+              view={review}
+              mode={active.member.mode}
+              role={active.member.role}
+              jumpTo={(id) => transcript.current?.jumpTo(id)}
+            />
           </div>
         </main>
       ) : (
         <main className="welcome">
           <div className="burst" aria-hidden="true" />
           <div className="intro">
+            <img className="hero-logo" src="/logo.png" alt="Jev Scam Detector" />
             <p className="context stamp">CALL CHECK</p>
             <div className="title-stack">
-              <span className="ghost-copy" aria-hidden="true">
-                CHECK
-              </span>
               <h1>
                 <span className="title-line">CATCHING SCAMMERS</span>
                 <span className="title-line accent live">LIVE!</span>
               </h1>
             </div>
-            <p className="lede">
-              Make a private room for two people. Talk through your browsers,
-              then add lines to a shared five-second timeline.
-            </p>
-            <div className="demo-note">
-              <strong>No keys? Demo mode.</strong>
-              <span>
-                Typed text works without microphone permission. A sample rule
-                reviews it every five seconds.
-              </span>
-            </div>
           </div>
-          <form className="entry" onSubmit={(event) => void join(event)}>
-            <h2>Start or join</h2>
-            <fieldset>
-              <legend>Review mode</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="demo"
-                  checked={mode === "demo"}
-                  onChange={() => setMode("demo")}
-                />{" "}
-                Demo, no keys needed
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="live"
-                  checked={mode === "live"}
-                  onChange={() => setMode("live")}
-                />{" "}
-                Live, requires server providers
-              </label>
-            </fieldset>
+          <form
+            className="entry"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (sessionInput.trim()) void join(sessionInput.trim());
+            }}
+          >
+            <button
+              className="primary"
+              type="button"
+              disabled={screen.kind !== "lobby"}
+              onClick={() => void join()}
+            >
+              Create room
+            </button>
             <label htmlFor="room-input">Room ID, if joining</label>
             <input
               id="room-input"
               value={sessionInput}
               onChange={(event) => setSessionInput(event.target.value)}
-              placeholder="Leave blank to make a room"
               autoComplete="off"
             />
             <button
-              className="primary"
-              disabled={screen.kind === "joining" || screen.kind === "ending"}
               type="submit"
+              disabled={screen.kind !== "lobby" || !sessionInput.trim()}
             >
-              {screen.kind === "joining"
-                ? "Connecting…"
-                : sessionInput.trim()
-                  ? "Join room"
-                  : "Create room"}
+              Join room
             </button>
-            <small>
-              One host and one guest. The room ID is not a login token.
-            </small>
-            {message && (
-              <p role="alert" className="notice">
-                {message}
-              </p>
-            )}
+            {message && <p role="alert" className="notice">{message}</p>}
           </form>
         </main>
       )}
       <footer>
-        Jev call demo <span>0.3.0</span>
+        <div className="footer-brand">
+          <img className="footer-logo" src="/logo.png" alt="" />
+          Jev call demo
+        </div>
+        <span>0.4.0</span>
       </footer>
     </div>
   );
