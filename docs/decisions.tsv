@@ -1,0 +1,4 @@
+ts	phase	decision	why	evidence	result
+2026-10-04T00:36:58Z	contract	Selected server-owned complete-clip transcription	The file API supports closed WebM clips while browser-direct realtime credentials are unverified; the server keeps keys private	/tmp/jev-scaffold-evidence/design-server.md, /tmp/jev-scaffold-evidence/design-direct.md	contract frozen for lanes
+2026-10-04T00:36:58Z	contract	Kept text-only keyless demo and explicit live mode	A user can test the workflow without microphone permission or paid keys; unavailable is never safe	docs/api-contract.md, contracts/examples.json	wire examples written
+2026-10-04T00:36:58Z	contract	Bound sessions to token-derived seats and snapshot reconnect	Join may precede socket connection; a fresh authenticated snapshot restores peer state without trusting client speaker claims	docs/api-contract.md	wire contract written

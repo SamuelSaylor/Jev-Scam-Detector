@@ -1,0 +1,34 @@
+# Call demo architecture
+
+The browser call has two fixed participants. FastAPI owns membership, transcript order, assessment state, and provider credentials. WebRTC carries audio between browsers. The server relays signaling, not media. A single process holds sessions in memory; restart loses them.
+
+## Why the server owns transcription
+
+The candidates in `/tmp/jev-scaffold-evidence/design-server.md` and `design-direct.md` were scored against the six criteria in `plan.md`. Scores are ordinal, from 1 to 5.
+
+| Candidate | Browser audio | Secrets and attribution | No-key demo | Teammate interfaces | Lifecycle | Single-process deploy | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Server complete clips | 4 | 5 | 5 | 4 | 4 | 4 | 26 |
+| Browser-direct future Realtime | 2 | 3 | 5 | 3 | 3 | 3 | 19 |
+
+The server candidate wins. `MediaRecorder.start(5000)` timeslices need not be standalone decodable files. Each live upload must be one closed recorder instance with a complete WebM container. The OpenAI file endpoint accepts completed WebM uploads; it does not provide the ongoing input protocol that the direct candidate needs. Browser-direct Realtime credentials and final-event rules are not established by the cached file API documentation. The server keeps the OpenAI key off the browser and derives speaker identity from the bearer token. A five-second capture interval is not a five-second end-to-end result guarantee.
+
+The direct candidate contributes a separate microphone control, text-only demo without media permission, a snapshot on every authenticated socket connection, and explicit provider availability. Its proposed realtime grant endpoint and client-declared provider origins are rejected. The server does not claim that manually entered text came from speech. There is no Realtime integration.
+
+## Ownership and flow
+
+`jev_scam_detector.app:app` is the ASGI target. `/api` is the REST and WebSocket base. The backend owner implements a session store that serializes short state transitions per session, a FastAPI boundary, and provider adapters. The frontend owner implements session API calls, an event socket, WebRTC peer negotiation, a manual transcript form, and a separate microphone and live upload control. The delivery owner wires scripts and CI. [`api-contract.md`](api-contract.md) and [`examples.json`](../contracts/examples.json) are immutable shared inputs to these lanes. Change them only through the integration owner after all lanes stop.
+
+The store owns two token-bound seats, per-speaker sequence indexes, a monotonically ordered segment ledger, committed assessment cursor, socket slots, and expiration. Network and provider calls occur outside its lock. A five-second lifespan loop takes at most the latest 20 segments through a captured high-water mark only when a new segment has arrived since the last successful assessment. At most one assessment per session is in flight. A global semaphore caps provider calls at four. A success commits that high-water mark and evidence IDs from its snapshot. Failure keeps the cursor unchanged, reports unavailable, and permits retry at the next tick. No empty or unchanged snapshot invokes a provider. New arrivals during a call wait for the following tick.
+
+Define Python `Protocol` interfaces independent of FastAPI and SDK objects. `Transcriber.transcribe(clip: AudioClip) -> Transcription`, with immutable `AudioClip(data: bytes, mime_type: Literal['audio/webm'], speaker: Role)` and `Transcription(text: str)`. `Assessor.assess(segments: tuple[Segment, ...]) -> AssessmentDecision`, with `AssessmentDecision(risk: float, evidence_segment_ids: tuple[str, ...])`. Both methods are `async`. Parse provider output at the adapter boundary. Check that risk is finite and in `[0,1]` and that evidence IDs belong to the input snapshot. An invalid result is a provider failure, not a safe score. Demo assessment case-folds each of the 20 input texts. If any contains `code`, `money`, or `transfer`, it returns risk `0.8` and the matching segment IDs. Otherwise it returns risk `0.2` with no evidence IDs. It is clearly marked `demo`. Live assessment uses Jev's typed `Noul` probability and optional `Choice` among snapshot IDs plus `none`. No generated explanations or invented quotations. Display verbatim evidence text from the ledger.
+
+A host creates a session and shares only its ID. A guest claims the second seat by joining once. Both receive a full authenticated snapshot, including peer metadata, before processing incremental events. The host creates the offer after both sockets are present. The guest answers. Each queues ICE until a remote description exists. On socket replacement, the old socket closes, both peers discard the prior peer connection, and the host negotiates again. Joining before either socket connects is normal because the snapshot carries membership. A participant who leaves closes the whole session; disconnected sockets alone do not release seats.
+
+The keyless demo uses text input and does not call `getUserMedia`. A user starts peer audio with a separate microphone button. Live transcription requires explicit live mode and configured OpenAI and Jev providers. One local microphone stream feeds both the peer connection and a new `MediaRecorder` per clip. Start without a timeslice, stop after about five seconds, collect all `dataavailable` bytes, await `onstop`, and upload the closed Blob before starting the next clip. Stop the recorder and release its recording resources when the user stops transcription; stopping transcription does not stop peer audio. Unsupported WebM/Opus, failed permission, or provider failure leaves manual text available. Do not silently switch live assessment to demo.
+
+## Limits and deployment
+
+Only one worker process is supported. Cap active sessions at 32, roles at two per session, segments at 256 per session, assessments at 32 retained per session, text at 2,000 Unicode code points, clip at 2 MiB, and idle session life at 30 minutes. Session creation at capacity returns 503. A full transcript ledger returns 409. Expiration or end closes sockets and destroys tokens and transcripts. Keep no clip bytes after transcription. Set the allowed frontend origin explicitly and check HTTP CORS and WebSocket Origin. Localhost can use HTTP; deployment needs HTTPS/WSS and TURN for networks that cannot form direct peer connections. STUN alone does not promise connectivity. No recordings, keys, or participant tokens belong in logs or committed fixtures.
+
+The proposed 0.2.0 feature is a demo, not a calibrated fraud verdict. The UI must label `demo` or `live` and distinguish `unavailable` from low risk. The existing greeting CLI does not provide an ASGI app. The implementation lanes add it without treating the installed dependencies as proof that the server already works.
