@@ -1,4 +1,4 @@
-# API contract, version 0.2.0
+# API contract, version 0.3.0
 
 This reference fixes the independent backend and frontend wire format. JSON fields use camelCase. Request and response bodies have exactly the fields shown; reject unknown input fields with 422. IDs are opaque strings. Timestamps are UTC RFC 3339 strings with `Z`; relative times are nonnegative integer milliseconds since server `createdAt` for the session. The server stamps receipt time and derives `startMs` and `endMs`; manual segments have equal bounds. For audio, the bounds cover server upload receipt through completed transcription, not exact spoken-word timing. Segment order follows server append order. `clientSeq` is a positive integer scoped to the participant and session, shared by text and audio submissions. The browser increments it for each new submission and retains it for retries. The server returns the prior segment for the same speaker and sequence and identical request fingerprint, even after later sequences; conflicting reuse returns 409. The fingerprint for manual input uses the original submitted text, before trimming. Lower unseen sequences return 409. Audio fingerprint is MIME and full file digest; check dedupe before a second provider call. Sequence gaps are allowed. All success and error JSON use `Content-Type: application/json` except 204.
 
@@ -17,6 +17,10 @@ type Segment = {
 type Assessment = {
   id: string; status: 'ready'; mode: Mode;
   provider: 'demo-rule' | 'jev'; risk: number;
+  confidence: number | null; suspicionLevel: 'low' | 'moderate' | 'high';
+  indicators: ('credentials' | 'payment' | 'impersonation' | 'urgency' | 'secrecy' |
+    'remote_access' | 'upfront_fee' | 'reward' | 'story_change' | 'persistence')[];
+  summary: string;
   evidenceSegmentIds: string[]; throughSegmentId: string;
   createdAt: string; startMs: number; endMs: number;
 };
@@ -29,7 +33,7 @@ type Snapshot = {
 type ErrorBody = { error: { code: string; message: string } };
 ```
 
-`risk` is a finite probability in `[0,1]`, not a percentage. No assessment exists before text arrives. The displayed current risk is nullable: `currentRisk` is `null` when there is no ready assessment, when a newer segment remains unassessed, or when assessment provider status is `unavailable`, even if an older assessment exists. Otherwise it equals the last ready assessment's `risk`. The `Assessment` ledger contains only successful results and retains at most 32; its evidence IDs must still resolve in the retained segments. An unavailable state never means zero or safe. `demo-rule` only sees submitted text. `jev` is a typed judgment on transcript text, not verification of an actual scam. `providerStatus.transcription` is `unavailable` in demo mode; `assessment` starts `available` in demo mode. In live mode the server requires both configured providers at creation, and later failures change availability independently. A successful provider operation changes its state to `available`.
+`risk` is a finite normalized suspicion score in `[0,1]`, not a calibrated scam probability. Live mode normalizes Jev's three-level `Score` by dividing by 2. Demo scores are 0.1, 0.5, or 0.9 and have no model certainty estimate. `confidence` is Jev's returned distribution-based judgment confidence in `[0,1]`; demo uses `null`. High confidence can mean a confident low-suspicion judgment. `suspicionLevel` is low below 0.35, moderate from 0.35 to below 0.7, and high from 0.7. These display bands and evidence thresholds are unvalidated defaults, not safety gates. `summary` is a bounded, evidence-based one-line description assembled in code, not generated prose. No assessment exists before text arrives. `currentRisk` is `null` only when no successful assessment exists. Otherwise it retains the last successful assessment's score, including during pending reviews and provider failures. The `Assessment` ledger contains only successful results and retains at most 32; its evidence IDs must still resolve in the retained segments. The UI displays the latest assessment and summary together. Provider status `unavailable` takes precedence over the freshness note and shows a small failure warning without clearing the last result. Otherwise, a latest `throughSegmentId` different from the newest segment means updating. With no successful result the UI awaits its first assessment. REST and WebSocket reconnect snapshots retain all these fields for an active room. An unavailable state never means zero or safe. `demo-rule` only sees submitted text. `jev` is a typed judgment on transcript text, not verification of an actual scam. `providerStatus.transcription` is `unavailable` in demo mode; `assessment` starts `available` in demo mode. In live mode the server requires both configured providers at creation, and later failures change availability independently. A successful provider operation changes its state to `available`.
 
 ## REST
 
@@ -37,7 +41,7 @@ All session URLs use `/api/sessions/{sessionId}` with the literal session ID URL
 
 | Method and URL | Request | Success |
 | --- | --- | --- |
-| `GET /api/health` | No body or token. | 200 `{"status":"ok","version":"0.2.0"}`. |
+| `GET /api/health` | No body or token. | 200 `{"status":"ok","version":"0.3.0"}`. |
 | `POST /api/sessions` | JSON `{"mode":"demo"}` or `{"mode":"live"}`. | 201 `{"sessionId":"...","participantToken":"...","role":"host","mode":"demo"}`. |
 | `POST /api/sessions/{sessionId}/join` | JSON `{}`. | 201 `{"sessionId":"...","participantToken":"...","role":"guest","mode":"demo"}`. |
 | `GET /api/sessions/{sessionId}` | Bearer token, no body. | 200 `Snapshot`. |
@@ -70,7 +74,7 @@ Server frames after the snapshot have exactly these shapes:
 {"type":"peer","role":"guest","joined":true,"connected":true}
 {"type":"signal","from":"host","data":{"kind":"offer","sdp":"v=0..."}}
 {"type":"transcript","segment":{"id":"seg_1","speaker":"host","clientSeq":1,"text":"Send the code","source":"manual","createdAt":"2026-01-01T00:00:02Z","startMs":2000,"endMs":2000}}
-{"type":"assessment","assessment":{"id":"asm_1","status":"ready","mode":"demo","provider":"demo-rule","risk":0.8,"evidenceSegmentIds":["seg_1"],"throughSegmentId":"seg_1","createdAt":"2026-01-01T00:00:05Z","startMs":2000,"endMs":2000}}
+{"type":"assessment","assessment":{"id":"asm_1","status":"ready","mode":"demo","provider":"demo-rule","risk":0.9,"confidence":null,"suspicionLevel":"high","indicators":["credentials"],"summary":"High suspicion: requests for private credentials or verification codes.","evidenceSegmentIds":["seg_1"],"throughSegmentId":"seg_1","createdAt":"2026-01-01T00:00:05Z","startMs":2000,"endMs":2000}}
 {"type":"provider_status","provider":"assessment","status":"unavailable"}
 {"type":"signal_error","code":"peer_offline"}
 ```
@@ -79,4 +83,4 @@ Both connected roles receive `peer`, `transcript`, `assessment`, and `provider_s
 
 ## Scripts and verification contract
 
-The frontend package lives in `frontend/` and exposes `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e`. Backend checks run at the repository root with `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`. End-to-end testing uses two separate browser contexts and keyless demo text; provider calls remain untested without explicit safe credentials. Version the new feature `0.2.0` in Python and frontend metadata when those files are implemented.
+The frontend package lives in `frontend/` and exposes `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e`. Backend checks run at the repository root with `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`. End-to-end testing uses two separate browser contexts and keyless demo text; provider calls remain untested without explicit safe credentials. Version `0.3.0` updates both Python and frontend metadata. It changes score semantics and adds required assessment fields, so deploy the backend and frontend together.

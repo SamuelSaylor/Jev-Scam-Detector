@@ -22,6 +22,23 @@ const assessment = z
     mode,
     provider: z.enum(["demo-rule", "jev"]),
     risk: z.number().finite().min(0).max(1),
+    confidence: z.number().finite().min(0).max(1).nullable(),
+    suspicionLevel: z.enum(["low", "moderate", "high"]),
+    indicators: z.array(
+      z.enum([
+        "credentials",
+        "payment",
+        "impersonation",
+        "urgency",
+        "secrecy",
+        "remote_access",
+        "upfront_fee",
+        "reward",
+        "story_change",
+        "persistence",
+      ]),
+    ),
+    summary: z.string().min(1).max(400),
     evidenceSegmentIds: z.array(z.string()),
     throughSegmentId: z.string(),
     createdAt: z.string().datetime(),
@@ -134,21 +151,15 @@ export function updatedSnapshot(state: Snapshot, incoming: Event): Snapshot {
         segments: state.segments.some((item) => item.id === incoming.segment.id)
           ? state.segments
           : [...state.segments, incoming.segment],
-        currentRisk: null,
       };
     case "assessment":
+      if (state.assessments.some((item) => item.id === incoming.assessment.id)) {
+        return state;
+      }
       return {
         ...state,
-        assessments: state.assessments.some(
-          (item) => item.id === incoming.assessment.id,
-        )
-          ? state.assessments
-          : [...state.assessments, incoming.assessment],
-        currentRisk:
-          state.providerStatus.assessment === "available" &&
-          state.segments.at(-1)?.id === incoming.assessment.throughSegmentId
-            ? incoming.assessment.risk
-            : null,
+        assessments: [...state.assessments, incoming.assessment].slice(-32),
+        currentRisk: incoming.assessment.risk,
       };
     case "provider_status":
       return {
@@ -157,11 +168,6 @@ export function updatedSnapshot(state: Snapshot, incoming: Event): Snapshot {
           ...state.providerStatus,
           [incoming.provider]: incoming.status,
         },
-        currentRisk:
-          incoming.provider === "assessment" &&
-          incoming.status === "unavailable"
-            ? null
-            : state.currentRisk,
       };
     case "signal":
     case "signal_error":

@@ -44,6 +44,7 @@ def test_assessments_do_not_overlap_and_new_lines_wait() -> None:
             _ = holding.release.set()
             await first
             assert room.assessments[0]["throughSegmentId"] == "seg_1"
+            assert room.snapshot(backend.store.auth(room, token))["currentRisk"] == 0.3
             await backend.assess_pending()
             assert holding.calls == 2
             assert room.assessments[1]["throughSegmentId"] == "seg_2"

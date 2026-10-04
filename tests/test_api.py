@@ -92,7 +92,7 @@ def test_contract_examples_and_auth() -> None:
         assert client.get(url, headers=auth(host)).json()["currentRisk"] is None
         asyncio.run(backend.assess_pending())
         view = client.get(url, headers=auth(host)).json()
-        assert view["currentRisk"] == 0.8
+        assert view["currentRisk"] == 0.9
         assert view["assessments"][0]["evidenceSegmentIds"] == [segment.json()["id"]]
         asyncio.run(backend.assess_pending())
         assert len(client.get(url, headers=auth(host)).json()["assessments"]) == 1
@@ -296,7 +296,7 @@ def test_silent_clip_and_assessment_retry() -> None:
             _ = client.post(
                 f"{demo_url}/transcripts",
                 headers=auth(demo["participantToken"]),
-                json={"clientSeq": 1, "text": "code"},
+                json={"clientSeq": 1, "text": "Send the code"},
             )
             asyncio.run(backend.assess_pending())
             view = client.get(demo_url, headers=auth(demo["participantToken"])).json()
@@ -308,7 +308,7 @@ def test_silent_clip_and_assessment_retry() -> None:
                 client.get(demo_url, headers=auth(demo["participantToken"])).json()[
                     "currentRisk"
                 ]
-                == 0.8
+                == 0.9
             )
     finally:
         backend.transcriber, backend.live_assessor, backend.demo_assessor = (

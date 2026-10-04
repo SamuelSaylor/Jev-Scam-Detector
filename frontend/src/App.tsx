@@ -180,6 +180,9 @@ export default function App() {
   const active = screen.kind === "call" ? screen : null;
   const snapshot = active?.snapshot;
   const latest = snapshot?.assessments.at(-1);
+  const assessmentFailed = snapshot?.providerStatus.assessment === "unavailable";
+  const assessmentPending =
+    snapshot?.segments.at(-1)?.id !== latest?.throughSegmentId;
   const evidence = new Set(latest?.evidenceSegmentIds ?? []);
 
   return (
@@ -429,34 +432,39 @@ export default function App() {
             </div>
             <aside className="risk" aria-labelledby="risk-title">
               <p className="context stamp">CALL REVIEW</p>
-              <h2 id="risk-title">Text pressure</h2>
-              <div className="risk-reading">
+              <h2 id="risk-title">Scam suspicion</h2>
+              <div className="risk-reading" aria-live="polite" aria-atomic="true">
                 <span className="risk-slash" aria-hidden="true" />
-                {snapshot?.providerStatus.assessment === "unavailable"
-                  ? "Unavailable"
-                  : snapshot?.currentRisk === null ||
-                      snapshot?.currentRisk === undefined
-                    ? "Unassessed"
-                    : `${Math.round(snapshot.currentRisk * 100)}%`}
+                {latest
+                  ? `${latest.suspicionLevel.charAt(0).toUpperCase()}${latest.suspicionLevel.slice(1)}`
+                  : "Awaiting assessment"}
               </div>
-              <p>
-                {active.member.mode === "demo"
-                  ? "Demo heuristic. It checks typed text for a few example words. This is not a scam verdict."
-                  : "Jev example. This estimate uses transcript text, not verified caller identity."}
-              </p>
-              {snapshot?.providerStatus.assessment === "unavailable" && (
-                <p className="warning">
-                  Assessment provider unavailable. An old score cannot establish
-                  safety.
+              {latest && (
+                <p className="judgment-confidence">
+                  {latest.confidence === null
+                    ? `Demo suspicion score: ${Math.round(latest.risk * 100)} / 100`
+                    : `${Math.round(latest.confidence * 100)}% judgment confidence`}
                 </p>
               )}
-              {snapshot?.currentRisk === null &&
-                snapshot.providerStatus.assessment === "available" && (
-                  <p className="warning">
-                    New lines await the next five-second review. No result does
-                    not mean safe.
-                  </p>
-                )}
+              {latest && <p className="suspicion-summary">{latest.summary}</p>}
+              {assessmentFailed ? (
+                <small className="assessment-note warning">
+                  {latest
+                    ? "Review failed. Showing the previous assessment; newer lines may not be covered."
+                    : "Review failed. No successful assessment yet."}
+                </small>
+              ) : assessmentPending ? (
+                <small className="assessment-note">
+                  {latest
+                    ? "Updating. Showing the previous assessment."
+                    : "Awaiting the first five-second review."}
+                </small>
+              ) : null}
+              <p>
+                {active.member.mode === "demo"
+                  ? "Rule-based demo, not Jev confidence or a verified scam verdict."
+                  : "Jev confidence describes certainty in its text judgment, not the probability of a scam or verified caller identity."}
+              </p>
               {latest && (
                 <div className="evidence">
                   <h3>Evidence in this review</h3>
@@ -580,7 +588,7 @@ export default function App() {
         </main>
       )}
       <footer>
-        Jev call demo <span>0.2.0</span>
+        Jev call demo <span>0.3.0</span>
       </footer>
     </div>
   );

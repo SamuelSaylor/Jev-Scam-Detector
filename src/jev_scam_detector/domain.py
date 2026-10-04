@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Literal, Protocol
 
 Role = Literal["host", "guest"]
@@ -43,10 +44,25 @@ class Transcription:
     text: str
 
 
+class Indicator(StrEnum):
+    CREDENTIALS = "credentials"
+    PAYMENT = "payment"
+    IMPERSONATION = "impersonation"
+    URGENCY = "urgency"
+    SECRECY = "secrecy"
+    REMOTE_ACCESS = "remote_access"
+    UPFRONT_FEE = "upfront_fee"
+    REWARD = "reward"
+    STORY_CHANGE = "story_change"
+    PERSISTENCE = "persistence"
+
+
 @dataclass(frozen=True)
 class AssessmentDecision:
     risk: float
     evidence_segment_ids: tuple[str, ...]
+    confidence: float | None = None
+    indicators: tuple[Indicator, ...] = ()
 
 
 class Transcriber(Protocol):

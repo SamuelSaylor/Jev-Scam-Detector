@@ -1043,6 +1043,27 @@ h2 {
   transform: rotate(-1deg);
 }
 
+.risk .judgment-confidence {
+  font-weight: 700;
+}
+
+.risk .suspicion-summary {
+  font-size: 0.95rem;
+}
+
+.risk .assessment-note {
+  display: block;
+  margin: 8px 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.risk .assessment-note.warning {
+  border: 0;
+  padding: 4px 6px;
+  transform: none;
+}
+
 .evidence {
   border-top: 3px solid #000;
   margin-top: 18px;

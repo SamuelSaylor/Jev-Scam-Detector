@@ -1,4 +1,22 @@
-# Scaffold verification
+# Verification
+
+## Scam assessments, version 0.3.0
+
+Verified locally on `feat/scam-assessment-criteria`.
+
+| Check | Result |
+| --- | --- |
+| `bash scripts/verify.sh` | Ruff lint and formatting passed. Python and TypeScript checks passed with zero warnings. 46 Python tests and 4 frontend unit tests passed. The production build passed. npm reported zero vulnerabilities. |
+| `LD_LIBRARY_PATH=/tmp/rowdyhacks-browser-libs/root/usr/lib/x86_64-linux-gnu API_PORT=8011 npm --prefix frontend run test:e2e` | Six Chromium tests passed in 15.7 seconds against isolated FastAPI and Vite servers. |
+| `git diff --check` | Passed. |
+
+Two new browser tests exercise rapid transcript arrivals, retained results, small failure warnings, reconnect snapshots, recovery, low-suspicion summaries, and separate judgment confidence. They mock external assessment events for both display modes. Existing browser tests still exercise the real demo backend, peer audio, evidence, and room lifecycle. API tests exercise retained results and reconnects in both room modes using test assessors. No paid provider request ran.
+
+Chromium initially could not launch because `libnspr4`, `libnss3`, and `libasound2` were missing. Debian packages were downloaded and extracted under `/tmp/rowdyhacks-browser-libs` for this run, without system installation. On a normal machine, use `npx playwright install --with-deps chromium` as documented in the README. The 390-pixel-wide demo and live assessment screenshots were inspected. Screenshots and temporary libraries are not committed.
+
+The revised rubric is integration-tested, not accuracy-calibrated. Full retained conversations can hit Jev's context or timeout limits. Research sources, threshold semantics, and further evaluation needs are documented in [scam-criteria.md](scam-criteria.md).
+
+## Historical scaffold verification
 
 The integration owner and parent verified the local no-key demo. The parent reran the checks in the original repository on `feat/scaffold-call-demo` after bringing in the worktree commits. The application code at that checkpoint was `1c3ff50`.
 
@@ -13,7 +31,7 @@ The browser tests use separate contexts and fake microphone devices. They check 
 
 ## Remaining limits
 
-- Demo scores are fixed keyword buckets. They do not establish scam probability, voice authenticity, or safety.
+- Demo scores are fixed contextual rule buckets. They do not establish scam probability, Jev confidence, voice authenticity, or safety.
 - No real OpenAI or TypeSafe request ran. Real provider responses and acceptance of a browser-recorded clip remain unverified.
 - The live recorder waits for upload and transcription before capturing another clip. Speech during that wait is missed. Continuous capture with bounded backpressure belongs to the transcription lane.
 - Audio timestamps describe server processing. They are not word-level recording timestamps.

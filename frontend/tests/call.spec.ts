@@ -207,7 +207,7 @@ test("two browsers connect audio, review typed lines, then end the shared room",
       await expect(
         page.getByText("I will call the bank myself", { exact: true }),
       ).toBeVisible();
-      await expect(page.getByText("80%", { exact: true })).toBeVisible({
+      await expect(page.getByText("Demo suspicion score: 90 / 100", { exact: true })).toBeVisible({
         timeout: 20000,
       });
       await expect(
@@ -241,9 +241,9 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     try {
       const phonePage = await participant(phone);
       await phonePage.getByRole("button", { name: "Create room" }).click();
-      await expect(phonePage.locator(".call-header .context")).toContainText("Demo mode");
+      await expect(phonePage.locator(".call-header .context")).toContainText("DEMO");
       await expect(
-        phonePage.getByRole("heading", { name: "What the text suggests" }),
+        phonePage.getByRole("heading", { name: "Scam suspicion" }),
       ).toBeVisible();
       await phonePage.screenshot({
         path: "test-results/call-phone.png",
