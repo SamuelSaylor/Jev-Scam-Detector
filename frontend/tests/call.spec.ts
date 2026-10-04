@@ -349,6 +349,7 @@ test("transcript follows, preserves reading position, and keeps evidence jumps i
     expect(await host.evaluate(() => scrollY)).toBe(documentPosition);
     await host.getByRole("button", { name: "Latest messages" }).click();
     await expect(host.getByRole("button", { name: "Latest messages" })).toHaveCount(0);
+    await host.locator(".explanation").evaluate((node) => { node.scrollTop = 0; });
     await host.screenshot({ path: "/tmp/jev-call-layout/workspace-desktop.png", fullPage: true, animations: "disabled" });
     await host.getByRole("button", { name: "End call for everyone" }).click();
   } finally {
