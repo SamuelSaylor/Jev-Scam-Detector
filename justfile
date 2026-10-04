@@ -52,6 +52,9 @@ compose-build:
 compose-up:
     docker compose up --build -d --wait
 
+demo:
+    bash scripts/demo.sh
+
 compose-down:
     docker compose down
 
