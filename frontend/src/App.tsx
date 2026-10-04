@@ -456,7 +456,7 @@ export default function App() {
         </main>
       )}
       <footer>
-        Jev call demo <span>0.2.0</span>
+        Jev call demo <span>0.3.0</span>
       </footer>
     </div>
   );
