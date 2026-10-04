@@ -65,6 +65,22 @@ docker compose down
 
 To change the local port, set `WEB_PORT` and update `FRONTEND_ORIGIN` to the exact browser URL. Recreate containers after changing environment variables with `docker compose up -d`.
 
+### Share a temporary HTTPS demo
+
+Install `just`, `jq`, Python 3, and the [ngrok CLI](https://ngrok.com/docs/agent/cli/). Sign in to ngrok and start Docker. From the repository root, run:
+
+```bash
+just demo
+```
+
+Share the printed HTTPS URL and keep the terminal open. If ngrok shows a browser warning, click **Visit Site**. The command uses your existing ngrok login and Docker Compose configuration, including `WEB_PORT` in `.env`. It sets the exact public origin for HTTP and WebSocket access without editing `.env` or Vite. It prints the link after the public API responds.
+
+Anyone with the link can access the demo. Do not share provider keys or participant tokens. The tunnel disables ngrok's local request inspection.
+
+Press Ctrl+C to stop the tunnel. Docker containers stay running with the public origin, so local WebSockets reject connections. To restore local access, remove any public `FRONTEND_ORIGIN` override from your shell or `.env`, then run `just compose-up`. Run `just compose-down` to stop the containers instead.
+
+Starting the demo or restoring local access restarts the backend and discards active rooms and transcripts. A failed launch stops the tunnel it started but may leave containers running. HTTPS allows microphone access outside localhost. Ngrok does not relay WebRTC audio, so restrictive networks still need a TURN server.
+
 For a cloud VM, terminate HTTPS at an external reverse proxy or load balancer and forward requests and WebSocket upgrades to the frontend port. Set `FRONTEND_ORIGIN=https://your-domain.example`. The default port binding accepts only local connections. Use `WEB_BIND_ADDRESS=0.0.0.0` only when an external proxy needs network access, and restrict that port to the proxy with a firewall. Keep exactly one backend instance. These files do not provision a cloud host or certificates. The Render CD workflow deploys a separate single-container layout.
 
 ## Deploy on Render
