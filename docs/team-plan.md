@@ -8,14 +8,23 @@ The repository provides `scripts/verify.sh`, `scripts/verify-browser.sh`, CI, ig
 
 ## Team ownership
 
-| Person | Exclusive files | Starter tasks and acceptance |
+| Person | Maintenance scope | Starter tasks and acceptance |
 | --- | --- | --- |
 | Session and WebRTC | `src/jev_scam_detector/sessions.py`, `src/jev_scam_detector/app.py`, `tests/test_api.py`, `tests/test_lifecycle.py` | Maintain token-bound seats, TTL, capacity, REST, event authentication, and signaling. Keep the in-memory backend in one process. |
 | Transcription | `src/jev_scam_detector/providers.py`, `src/jev_scam_detector/app.py`, `tests/test_providers.py` | Maintain WebM uploads under 2 MiB and token-owned speaker attribution. The server checks headers, not container decodability. Test provider failure and empty results with fakes. Do not save audio. Coordinate `app.py` edits with the session owner. |
 | Jev judgment and evals | `src/jev_scam_detector/providers.py`, `src/jev_scam_detector/sessions.py`, `tests/test_providers.py`, `tests/test_lifecycle.py` | Maintain the five-second assessment ticks, four concurrent provider slots, demo rule, Jev adapter, and segment-linked evidence. Add synthetic eval fixtures before treating scores as calibrated. Coordinate shared files with their owners. |
 | UI, demo, and deployment | `frontend/`, `frontend/tests/call.spec.ts`, `scripts/verify-browser.sh` | Maintain create and join, manual text, two-context WebRTC, evidence display, and optional live recording. Check inbound audio stats in both browsers and keep deployment claims separate from local checks. |
 
-The session and WebRTC owner coordinates shared edits to `jev_scam_detector.app:app`. Each person works in a separate branch or worktree; one integration owner resolves cross-layer contract changes. Do not stage `.env`, provider keys, real transcript text, recordings, or browser test artifacts.
+The session and WebRTC owner coordinates shared edits to `jev_scam_detector.app:app`. The table describes maintenance areas, not permission for concurrent edits to the same file. Give each shared file one active writer. Each person works in a separate branch or worktree; one integration owner resolves cross-layer contract changes. Do not stage `.env`, provider keys, real transcript text, recordings, or browser test artifacts.
+
+## Next hackathon tasks
+
+- The session owner uses `feat/call-reliability`. Rehearse reconnect and end-call on two laptops. Keep `app.py`, `sessions.py`, and lifecycle changes in this lane.
+- The transcription owner uses `feat/live-transcription`. Develop `src/jev_scam_detector/transcription.py` and `tests/test_transcription.py`. Move the OpenAI adapter out of `providers.py` through the integration owner. Validate a real browser clip with credentials. Replace the recorder's wait-between-clips behavior with bounded continuous capture. Preserve capture timestamps separately from server processing times. Coordinate `frontend/src/recorder.ts` with the UI owner.
+- The Jev owner uses `feat/jev-evals`. Develop `src/jev_scam_detector/assessment.py`, `tests/test_assessment.py`, and synthetic fixtures under `evals/`. Move the Jev adapter through the integration owner. Test ordinary and suspicious calls, inspect evidence selection, and choose questions and thresholds from those results. Do not treat the demo rule as an accuracy baseline.
+- The UI and deployment owner uses `feat/demo-deployment`. Own React UI changes, a public HTTPS demo, TURN configuration, and the presentation script. Leave `frontend/src/recorder.ts` to the transcription owner while that lane is active. Verify two separate devices on the deployed origin.
+
+Land the adapter moves before wiring them into `app.py`. The integration owner changes imports after both provider lanes finish. Keep the existing provider Protocols and wire messages stable unless the whole team agrees on a contract change.
 
 ## Checks before the demo
 
