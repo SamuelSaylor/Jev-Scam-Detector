@@ -1,0 +1,2 @@
+when i wake up:
+-check fake domains in email names (ie: rnicrosoft.com)
