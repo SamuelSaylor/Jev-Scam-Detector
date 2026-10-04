@@ -1218,3 +1218,102 @@ footer span {
     transition: none !important;
   }
 }
+
+.call-layout {
+  padding: 18px clamp(24px, 3vw, 48px) 20px;
+}
+.call-grid {
+  display: grid;
+  grid-template-columns: minmax(235px, 0.8fr) minmax(0, 1.65fr) 96px;
+  grid-template-rows: minmax(0, 1fr) minmax(155px, auto);
+  gap: 16px;
+  height: clamp(620px, calc(100dvh - 202px), 820px);
+}
+.call-header {
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+.call-header h1 { font-family: var(--font-display); font-size: clamp(24px, 2.4vw, 36px); margin: 0 auto 0 0; }
+.call-header .context { margin: 0; }
+.call-header .room-ticket { min-width: 250px; padding: 8px 12px; gap: 2px; transform: none; box-shadow: 4px 4px 0 var(--red); }
+.call-header .room-ticket strong { font-size: 16px; padding: 0; }
+.call-header .room-ticket small { font-size: 11px; }
+.call-header .room-ticket button { font-size: 13px; padding: 3px 8px; }
+.call-main, .conversation { min-width: 0; min-height: 0; }
+.call-main { grid-column: 1; grid-row: 1; overflow: auto; padding: 8px 8px 8px 0; }
+.call-main .people { grid-template-columns: 1fr; padding: 12px; gap: 8px; transform: none; }
+.call-main .person { padding: 6px; transform: none; }
+.call-main .avatar { width: 38px; height: 38px; font-size: 16px; }
+.call-main .connection-line { margin: 12px 0; }
+.call-main .controls { display: grid; grid-template-columns: 1fr; }
+.call-main .controls button { border-radius: 0; min-height: 43px; font-size: 14px; }
+.call-main .privacy { margin: 12px 0; }
+.conversation { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; background: rgb(0 0 0 / 0.52); border: 4px solid var(--white); padding: 12px; }
+.transcript { min-height: 0; flex: 1; display: flex; flex-direction: column; border: 0; padding: 0; position: relative; }
+.transcript .section-heading h2 { margin-bottom: 8px; }
+.transcript .section-heading > span { margin-bottom: 12px; }
+.transcript-viewport { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; scrollbar-color: var(--red) var(--ink); padding: 8px 10px; }
+.timeline { display: flex; flex-direction: column; gap: 14px; }
+.timeline li, .timeline li:nth-child(even) { display: block; max-width: 79%; margin: 0; transform: none; padding: 10px 12px; background: var(--paper); overflow-wrap: anywhere; }
+.timeline li.local { align-self: flex-end; background: var(--white); border-color: var(--red); }
+.timeline li.remote { align-self: flex-start; }
+.timeline li.evidence-line { box-shadow: 5px 5px 0 var(--red); }
+.timeline li:focus { outline: 3px solid var(--red); outline-offset: 2px; }
+.bubble-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.bubble-meta span { font-family: var(--font-stamp); color: #5a5348; }
+.timeline p { margin: 7px 0 0; }
+.latest-messages { position: absolute; bottom: 8px; right: 18px; background: var(--red); color: var(--white); border: 3px solid var(--ink); padding: 5px 10px; }
+.conversation .text-form { margin-top: 8px; flex: none; }
+.conversation .text-form label { font-size: 13px; }
+.conversation .text-form > div { margin: 5px 0; }
+.conversation .text-form input { min-width: 0; flex: 1; }
+.conversation .text-form button { font-size: 14px; }
+.conversation .text-form small { font-size: 11px; }
+.likelihood { grid-column: 3; grid-row: 1 / 3; min-width: 0; background: var(--paper); color: var(--ink); border: 5px solid #000; box-shadow: 6px 6px 0 var(--red); display: flex; flex-direction: column; align-items: center; padding: 9px 5px; }
+.likelihood h2 { font: 14px var(--font-stamp); text-align: center; overflow-wrap: anywhere; margin: 0 0 8px; }
+.likelihood-value { font: 16px var(--font-stamp); text-align: center; overflow-wrap: anywhere; }
+.likelihood-track { position: relative; flex: 1; width: 28px; margin: 12px auto; border: 3px solid var(--ink); background: var(--paper-dark); }
+.is-ready .likelihood-track { background: linear-gradient(to top, var(--ok), var(--warn) 50%, var(--red)); }
+.likelihood-marker { position: absolute; left: -10px; width: 42px; height: 5px; background: var(--ink); transform: translateY(50%); }
+.likelihood-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: center; font: 12px var(--font-stamp); }
+.is-neutral .likelihood-value { font-size: 12px; }
+.explanation { grid-column: 1 / 3; grid-row: 2; min-width: 0; overflow: auto; background: var(--paper); color: var(--ink); border: 5px solid #000; box-shadow: 6px 6px 0 var(--red); padding: 12px 18px; }
+.explanation .section-heading h2 { font-size: 20px; margin: 3px 0; }
+.explanation .context { color: var(--red-deep); }
+.explanation p { margin: 7px 0; font-size: 13px; }
+.explanation .evidence h3 { margin: 8px 0 3px; font-size: 14px; }
+.explanation .evidence ul { margin: 0; padding-left: 22px; }
+.explanation .evidence button { border: 0; padding: 0; background: transparent; color: var(--red-deep); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.explanation .guidance { border-top: 2px solid var(--ink); padding-top: 6px; }
+.explanation .guidance strong { display: block; }
+@media (max-height: 700px) and (min-width: 851px) { .call-grid { height: 620px; } }
+@media (max-width: 850px) {
+  .call-header { flex-direction: column; align-items: stretch; }
+  .call-header .room-ticket { width: 100%; }
+  .call-grid { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .call-main, .conversation, .likelihood, .explanation { grid-column: 1; grid-row: auto; }
+  .call-main { overflow: visible; }
+  .conversation { height: min(62vh, 540px); min-height: 360px; }
+  .likelihood { min-height: 92px; flex-direction: row; gap: 12px; padding: 10px; }
+  .likelihood-track { flex: 1; height: 26px; margin: 0; background: var(--paper-dark); }
+  .is-ready .likelihood-track { background: linear-gradient(to right, var(--ok), var(--warn) 50%, var(--red)); }
+  .likelihood-marker { left: auto; bottom: -8px !important; height: 42px; width: 5px; }
+  .likelihood-axis { display: none; }
+  .explanation { max-height: 340px; }
+}
+@media (max-width: 520px) { .call-layout { padding: 16px 24px 30px; } .conversation .text-form > div { flex-direction: row; } .conversation .text-form button { white-space: normal; } .timeline li { max-width: 91%; } }
+.shell:has(.call-layout)::after { display: none; }
+@media (min-width: 851px) and (min-height: 701px) { .call-grid { height: clamp(550px, calc(100dvh - 300px), 760px); } }
+.explanation .guidance { background: transparent; color: var(--ink); border: 0; border-top: 2px solid var(--ink); box-shadow: none; padding: 6px 0 0; margin: 6px 0 0; transform: none; }
+.explanation .guidance strong { color: var(--red-deep); }
+@media (min-width: 851px) {
+  .call-grid { grid-template-rows: minmax(0, 1fr) 190px; }
+  .likelihood-marker { bottom: var(--risk-position); }
+}
+@media (max-width: 850px) {
+  .likelihood-marker { left: var(--risk-position); bottom: -8px !important; }
+}
+.call-layout { animation: none; }
+.likelihood-high, .likelihood-low { font: 12px var(--font-stamp); }
+@media (max-width: 850px) { .likelihood-high { order: 4; } .likelihood-low { order: 2; } .likelihood-track { order: 3; } }

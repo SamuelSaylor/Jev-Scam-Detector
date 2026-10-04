@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const apiPort = process.env.API_PORT ?? "8000";
+const webPort = process.env.WEB_PORT ?? "5173";
 
 export default defineConfig({
   testDir: "./tests",
@@ -8,6 +9,7 @@ export default defineConfig({
   expect: { timeout: 20000 },
   use: {
     ...devices["Desktop Chrome"],
+    baseURL: `http://127.0.0.1:${webPort}`,
     permissions: ["microphone"],
     launchOptions: {
       args: [
@@ -21,16 +23,16 @@ export default defineConfig({
   webServer: [
     {
       command:
-        `uv run uvicorn jev_scam_detector.app:app --host 127.0.0.1 --port ${apiPort}`,
+        `FRONTEND_ORIGIN=http://127.0.0.1:${webPort} uv run uvicorn jev_scam_detector.app:app --host 127.0.0.1 --port ${apiPort}`,
       cwd: "..",
       url: `http://127.0.0.1:${apiPort}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
-      command: "npm run dev -- --port 5173",
+      command: `npm run dev -- --port ${webPort} --strictPort`,
       cwd: ".",
-      url: "http://127.0.0.1:5173",
+      url: `http://127.0.0.1:${webPort}`,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
