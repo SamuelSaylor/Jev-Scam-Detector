@@ -1,0 +1,18 @@
+# Deploy the demo on Render
+
+Deploy one Docker web service with the built browser app and one FastAPI worker. Demo mode needs no API keys.
+
+1. Connect your GitHub account and this repository in the [Render Dashboard](https://dashboard.render.com/).
+2. Merge to a branch with CI checks. The repository runs its `verify` job on pull requests and pushes to `main`. In Render, select **New > Blueprint** and choose this repository and a checked branch, such as `main` after integration.
+3. Review `render.yaml` before creating the Blueprint. It requests one Free web service, builds the repository's default Docker stage, and checks `/api/health`. It requests no disk, database, or paid add-on. Confirm your workspace usage and payment settings before creation. Render still requires your account and Git connection.
+4. Wait for a healthy deployment. Open its `https://...onrender.com` address in two separate browser contexts and follow the [two-person demo steps](../README.md#try-the-two-person-no-key-demo). Check room creation, joining, typed lines, and the review. Try microphone audio on the networks you intend to use.
+
+The service reads Render's `PORT` and `RENDER_EXTERNAL_URL` at runtime. It binds to `0.0.0.0` and uses the public HTTPS URL as the exact allowed WebSocket origin. For a custom domain, set `FRONTEND_ORIGIN` in the service's Dashboard environment to the exact browser origin, such as `https://call.example.org`. Do not add a trailing slash, path, or wildcard. The explicit value takes precedence over `RENDER_EXTERNAL_URL`. Only that origin passes the WebSocket check. Restart the service after changing the value.
+
+`autoDeployTrigger: checksPass` deploys only when the linked Git provider reports passing checks for the selected branch. A feature-branch push alone does not run this repository's `verify` workflow. Confirm that Render sees checks for your chosen branch before relying on automatic deploys. No GitHub deployment hook is needed.
+
+Free services sleep after 15 minutes without inbound traffic. The next request can take time to start. Free instances have 750 hours per workspace per month; exhaustion suspends the service. Build or bandwidth overages can incur charges when the workspace has a payment method, so `plan: free` does not guarantee zero charges. To avoid automatic overage charges, use a workspace without a payment method. Render suspends services or disables new builds when those allowances run out. Check the [current free-tier limits](https://render.com/docs/free) before the event. Render's filesystem is ephemeral. Rooms, tokens, transcripts, and pending assessments live in one worker's memory and disappear on sleep, restart, crash, or redeploy. `/api/health` tests process readiness, not call continuity or provider health.
+
+The shipped `/config.json` has STUN but no TURN relay. Some networks cannot carry peer audio even when API and WebSocket signaling work. For optional live transcription and assessment, set `OPENAI_API_KEY` and `TYPESAFE_API_KEY` as private service environment variables in Render. Keep them server-side and out of Git and browser config. Demo mode works without them. Set `EMAIL_SCAN_TOKEN` as a private service environment variable to require a bearer token for `/api/emails/scan`. Configure the email client with the same token. Without it, email scans allow unauthenticated requests.
+
+Run `bash scripts/verify-render.sh` locally with Docker and uv to build and probe the same default Docker image. The script uses local port 18763 by default; set `VERIFY_RENDER_PORT` if it is occupied. Local HTTP and WebSocket checks do not validate Render's public TLS edge, Git check visibility, billing settings, or browser media connectivity.
