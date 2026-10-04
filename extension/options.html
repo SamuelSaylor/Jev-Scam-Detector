@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Jev Email Scanner settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>Jev Email Scanner</h1>
+      <p class="note">
+        The extension sends the text of an email to your Jev server only after you
+        click <strong>Scan with Jev</strong> in Gmail and confirm.
+      </p>
+
+      <label for="server">Server URL</label>
+      <input id="server" type="url" placeholder="http://127.0.0.1:8000" spellcheck="false">
+
+      <label for="token">
+        Access token
+        <span class="optional">(only if the server sets EMAIL_SCAN_TOKEN)</span>
+      </label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false">
+
+      <div class="row">
+        <button id="save" class="primary">Save</button>
+        <button id="test">Test connection</button>
+      </div>
+      <p id="status" role="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
