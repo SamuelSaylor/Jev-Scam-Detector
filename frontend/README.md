@@ -1,9 +1,25 @@
 # Jev call web
 
-The React app runs at version 0.2.0. From `frontend/`, run `npm install` and `npm run dev`. Start the FastAPI server on `127.0.0.1:8000` separately. Vite proxies `/api` REST and WebSocket requests there. A built app uses relative `/api` requests and same-origin WebSockets. Deploy it behind HTTPS with `/api` routed to the server and WebSocket upgrades enabled.
+The React app is version 0.3.3. From `frontend/`, run `npm install` and `npm run dev`. Start FastAPI separately on `127.0.0.1:8000`. Vite proxies REST and WebSocket requests under `/api`. Production uses same-origin requests; deploy behind HTTPS with WebSocket upgrades enabled.
 
-Choose **Demo, no keys needed** and create a room. Send the room ID to a second browser. Both participants can type transcript lines without microphone permission or API keys. Demo mode does not upload microphone audio or transcribe speech. **Connect microphone** separately for peer audio. A demo risk score comes from a word-matching example, not a verified caller identity or a calibrated scam verdict. Live mode requires configured server-side OpenAI and Jev providers. **Start live transcription** records complete WebM/Opus clips of about five seconds; unsupported browsers can still use typed lines. The microphone track can be muted independently.
+## Live rooms
 
-The app fetches `/config.json` at startup. Replace its `iceServers` array at deployment with STUN and, where needed, TURN entries such as `{ "urls": "turn:turn.example.org:3478", "username": "runtime-user", "credential": "runtime-secret" }`. Serve that config from a protected deployment process rather than committing credentials. Client-visible TURN credentials are unavoidable; issue short-lived scoped credentials. The default public config has only STUN, so restrictive networks may fail to connect audio. Browser media capture needs HTTPS outside localhost. Sessions and transcripts remain in one server process and disappear on restart. Do not record or log call audio or tokens.
+The welcome screen creates **live rooms only**, with no demo section or mode picker. Configure the server-side OpenAI transcription and Jev assessment providers before creating a room. The frontend never accepts provider keys. Joining uses the existing room's mode. If the backend supplies a demo membership, the UI labels its actual mode and rule output instead of misrepresenting it as live Jev.
 
-Run `npm run typecheck`, `npm test`, and `npm run build`. Run `npx playwright install chromium` once, then `npm run test:e2e` with the backend source installed. Playwright starts uvicorn and Vite, creates independent browser contexts, and retains a phone-width screenshot in ignored `test-results/`. The integration check does not use paid providers.
+Share the room ID with a second browser. Both participants can type conversation lines without microphone permission. Connect the microphone separately for peer-to-peer audio. Starting live transcription uploads closed WebM/Opus clips of about five seconds. Unsupported browsers and provider failures leave typed input available. Mute affects the microphone track independently.
+
+## Review and session controls
+
+The shared transcript uses local/right and remote/left bubbles with server receipt timestamps and Typed or Transcribed audio source labels. Evidence controls focus and briefly highlight their matching bubble. Reading history preserves the scroll position and announces new lines. Returning to latest restores follow mode.
+
+The risk rail is vertical on desktop and horizontal on mobile. The black panels use red header strips, outlines, and solid meter fills; readable text stays off-white with yellow keyboard focus. The UI omits instructional captions, repeated assessment commentary, decorative footer text, and implementation caveats. Risk freshness, timestamps, sources, and the verdict qualification stay visible. Only a returned current risk is shown as current. Pending review, provider outage, room connection loss, and ended calls keep previous scores explicitly historical. Assessment timestamps come from the backend. Explanations and confidence are not supplied by the API and are not synthesized. Bands are presentation categories, not validated thresholds.
+
+Ending the call requires confirmation and ends the room for both participants. The transcript remains visible in the browser until **Back to rooms**. If the end request fails, the UI distinguishes local disconnection from server-confirmed termination. Room connection state, peer seat presence, and audio health are separate.
+
+## Deployment
+
+The app fetches `/config.json` for `iceServers`. Configure STUN and TURN where needed. Issue short-lived scoped TURN credentials rather than committing permanent secrets. Browser media capture requires HTTPS outside localhost. Sessions remain in one server process and disappear on restart. Do not log audio or participant tokens.
+
+## Verification
+
+Run `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e`. Playwright starts uvicorn and Vite and uses independent browser contexts to check real peer audio, room events, and responsive layouts. Integration tests create keyless demo sessions through a test-only helper; the shipped create action remains live-only. Simulated provider events exist only inside the tests. Paid live providers are not called by the suite.

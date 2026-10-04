@@ -9,12 +9,19 @@ import {
 } from "./protocol";
 import { request } from "./api";
 
+export type RoomConnection =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected";
+
 type RoomCallbacks = {
   onSnapshot: (snapshot: Snapshot) => void;
   onAudio: (stream: MediaStream | null) => void;
   onConnection: (state: RTCPeerConnectionState | "waiting") => void;
+  onRoomConnection: (state: RoomConnection) => void;
   onMessage: (message: string) => void;
-  onEnd: () => void;
+  onEnd: (reason: "ended" | "rejected") => void;
 };
 
 export class Room {
@@ -55,7 +62,14 @@ export class Room {
   }
 
   reconnect() {
-    this.socket?.close(4000, "Reconnect requested");
+    if (this.stopped) return;
+    this.callbacks.onRoomConnection("reconnecting");
+    if (this.socket) this.socket.close(4000, "Reconnect requested");
+    else {
+      if (this.retry) clearTimeout(this.retry);
+      this.retry = null;
+      this.connect();
+    }
   }
   nextSequence() {
     return ++this.sequence;
@@ -99,7 +113,12 @@ export class Room {
         }),
       );
     socket.onmessage = (event) => {
-      if (typeof event.data !== "string") return;
+      if (
+        this.socket !== socket ||
+        this.stopped ||
+        typeof event.data !== "string"
+      )
+        return;
       let message: Event;
       try {
         message = decodeEvent(event.data);
@@ -126,8 +145,10 @@ export class Room {
             ? "The call ended or expired."
             : "Call access was rejected.",
         );
-        this.callbacks.onEnd();
+        this.callbacks.onRoomConnection("disconnected");
+        this.callbacks.onEnd(event.code === 4404 ? "ended" : "rejected");
       } else {
+        this.callbacks.onRoomConnection("reconnecting");
         this.callbacks.onMessage("Connection lost. Reconnecting to the room.");
         this.retry = setTimeout(() => this.connect(), 1000);
       }
@@ -137,6 +158,7 @@ export class Room {
   private async receive(message: Event) {
     if (this.stopped) return;
     if (message.type === "snapshot") {
+      this.callbacks.onRoomConnection("connected");
       this.resetPeer();
       this.sequence = Math.max(
         this.sequence,
@@ -150,7 +172,8 @@ export class Room {
       message.type === "peer" &&
       message.role !== this.member.role &&
       !message.connected
-    ) this.resetPeer();
+    )
+      this.resetPeer();
     if (this.state) this.state = updatedSnapshot(this.state, message);
     else if (message.type === "snapshot") this.state = message.snapshot;
     if (this.state) this.callbacks.onSnapshot(this.state);
@@ -292,6 +315,7 @@ export class Room {
 
   submitText(text: string): Promise<void> {
     return this.enqueue(async () => {
+      if (this.stopped) return;
       await request(
         `/sessions/${encodeURIComponent(this.member.sessionId)}/transcripts`,
         {

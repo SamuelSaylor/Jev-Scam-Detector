@@ -22,7 +22,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `FRONTEND_ORIGIN=http://127.0.0.1:${webPort} uv run uvicorn jev_scam_detector.app:app --host 127.0.0.1 --port ${apiPort}`,
+      command: `uv run uvicorn jev_scam_detector.app:app --host 127.0.0.1 --port ${apiPort}`,
+      env: { FRONTEND_ORIGIN: `http://127.0.0.1:${webPort}` },
       cwd: "..",
       url: `http://127.0.0.1:${apiPort}/api/health`,
       reuseExistingServer: !process.env.CI,

@@ -1,11 +1,11 @@
-import type { CSSProperties } from "react";
-import { assessmentCopy, type AssessmentView } from "./assessment-view";
+import { useLayoutEffect, useRef, useState } from "react";
+import {
+  assessmentCopy,
+  percentage,
+  receiptTime,
+  type AssessmentView,
+} from "./assessment-view";
 import type { Membership } from "./protocol";
-
-function elapsed(milliseconds: number) {
-  const seconds = Math.floor(milliseconds / 1000);
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 export function Assessment({
   view,
@@ -18,62 +18,164 @@ export function Assessment({
   role: Membership["role"];
   jumpTo: (id: string) => void;
 }) {
-  const evidence =
-    view.kind === "ready"
-      ? view.evidence
-      : "earlierEvidence" in view
-        ? view.earlierEvidence
-        : [];
+  const evidence = view.kind === "ready" ? view.evidence : view.earlierEvidence;
   const copy = assessmentCopy(mode, view);
-  const markerStyle: CSSProperties & {
-    "--risk-position": string;
-    "--risk-color": string;
-  } = {
-    "--risk-position": `${view.kind === "ready" ? view.risk * 100 : 0}%`,
-    "--risk-color": `hsl(${view.kind === "ready" ? 120 * (1 - view.risk) : 0} 90% 45%)`,
-  };
+  const current = view.kind === "ready" ? view.risk : null;
+  const previousId = useRef<string | undefined>(undefined);
+  const [fill, setFill] = useState({ amount: 0, animate: false });
+  useLayoutEffect(() => {
+    if (current === null) {
+      setFill({ amount: 0, animate: false });
+      return;
+    }
+    setFill({
+      amount: current * 100,
+      animate: previousId.current !== view.latest?.id,
+    });
+    previousId.current = view.latest?.id;
+  }, [current, view.latest?.id]);
+  const band =
+    current === null
+      ? "unknown"
+      : current >= 0.7
+        ? "high"
+        : current >= 0.35
+          ? "medium"
+          : "low";
+  const announcement = `${mode.toUpperCase()}. ${copy.likelihood}. ${view.kind === "ready" ? `Completed assessment ${view.latest.createdAt}.` : "No current estimate."}`;
+
   return (
     <>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
       <aside
-        className={`likelihood ${view.kind === "ready" ? "is-ready" : "is-neutral"}`}
+        className={`likelihood panel band-${band} ${view.kind === "ready" ? "is-ready" : "is-neutral"}`}
         aria-labelledby="risk-title"
       >
-        <h2 id="risk-title">Scam likelihood</h2>
-        <strong className="likelihood-value" aria-live="polite">
-          {copy.likelihood}
-        </strong>
-        <span className="likelihood-high" aria-hidden="true">
-          High
+        <h2 id="risk-title">SCAM CHANCE</h2>
+        <span className="stamp risk-state">
+          {view.kind === "ready" ? "CURRENT" : copy.likelihood.toUpperCase()}
         </span>
-        <div className="likelihood-track" aria-hidden="true">
-          {view.kind === "ready" && (
-            <span className="likelihood-marker" style={markerStyle} />
+        <strong className="likelihood-value">
+          {view.kind === "ready" ? copy.likelihood : "No estimate"}
+        </strong>
+        <div
+          className="risk-gauge"
+          role={current !== null ? "meter" : undefined}
+          aria-label={current !== null ? "Estimated scam chance" : undefined}
+          aria-valuemin={current !== null ? 0 : undefined}
+          aria-valuemax={current !== null ? 100 : undefined}
+          aria-valuenow={
+            current !== null ? Math.round(current * 100) : undefined
+          }
+        >
+          <div className="likelihood-track" aria-hidden="true">
+            {current !== null && (
+              <>
+                <span
+                  className={`likelihood-fill vertical ${fill.animate ? "animate" : ""}`}
+                  style={{ height: `${fill.amount}%` }}
+                />
+                <span
+                  className={`likelihood-fill horizontal ${fill.animate ? "animate" : ""}`}
+                  style={{ width: `${fill.amount}%` }}
+                />
+              </>
+            )}
+            <span className="gauge-segments" />
+          </div>
+          <div className="gauge-scale" aria-hidden="true">
+            <span>100</span>
+            <span>50</span>
+            <span>0</span>
+          </div>
+        </div>
+        <div className="historical-slot">
+          {view.kind !== "ready" && view.latest && (
+            <p className="historical-score">
+              <strong>Previous · {percentage(view.latest.risk)}</strong>
+              <span>Historical only.</span>
+            </p>
           )}
         </div>
-        <span className="likelihood-low" aria-hidden="true">
-          Low
-        </span>
+        <p className="qualification">
+          Estimate based on the latest completed assessment; not a confirmed
+          scam verdict.
+        </p>
+        {mode === "demo" && (
+          <p className="demo-label">DEMO RULE · Not live Jev.</p>
+        )}
       </aside>
-      <section className="explanation" aria-labelledby="explanation-title">
-        <div className="recommendation">
-          <h2 id="explanation-title">Recommendation</h2>
-          <p>{copy.sentence}</p>
+      <section
+        className="explanation panel"
+        aria-labelledby="explanation-title"
+      >
+        <div className="response-heading">
+          <img src="/logo.png" alt="" width="38" height="38" />
+          <h2 id="explanation-title">JEV RESPONSE</h2>
+          <span>
+            {view.latest
+              ? `${view.latest.mode.toUpperCase()} / ${view.latest.provider.toUpperCase()}`
+              : mode.toUpperCase()}
+          </span>
         </div>
-        {evidence.length > 0 && (
+        <div className="response-body">
+          <div className="recommendation">
+            <h3>
+              {view.latest
+                ? `${view.kind === "ready" ? "Latest" : "Historical result"} · ${percentage(view.latest.risk)}`
+                : "No assessment yet"}
+            </h3>
+            {view.latest && (
+              <p className="assessment-time">
+                Assessed{" "}
+                <time
+                  dateTime={view.latest.createdAt}
+                  title={view.latest.createdAt}
+                >
+                  {receiptTime(view.latest.createdAt)}
+                </time>{" "}
+                · {view.latest.provider}
+              </p>
+            )}
+            {view.kind !== "ready" && (
+              <p className="review-description">{copy.sentence}</p>
+            )}
+          </div>
           <div className="evidence">
             <h3>{view.kind === "ready" ? "Evidence" : "Earlier evidence"}</h3>
-            <ul>
-              {evidence.map((line) => (
-                <li key={line.id}>
-                  <button type="button" onClick={() => jumpTo(line.id)}>
-                    <span className="evidence-meta">{line.speaker === role ? "You" : "Other participant"} · {elapsed(line.startMs)}</span>
-                    <span>“{line.text}”</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {evidence.length ? (
+              <ul>
+                {evidence.map((line) => (
+                  <li key={line.id}>
+                    <button type="button" onClick={() => jumpTo(line.id)}>
+                      <span className="evidence-meta">
+                        {line.speaker === role
+                          ? "You"
+                          : line.speaker === "host"
+                            ? "Host"
+                            : "Guest"}{" "}
+                        · {receiptTime(line.createdAt)} ·{" "}
+                        {line.source === "manual"
+                          ? "Typed"
+                          : "Transcribed audio"}{" "}
+                        ↗
+                      </span>
+                      <span>{line.text}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>
+                {view.latest
+                  ? "No cited lines. This does not establish safety."
+                  : "None"}
+              </p>
+            )}
           </div>
-        )}
+        </div>
       </section>
     </>
   );

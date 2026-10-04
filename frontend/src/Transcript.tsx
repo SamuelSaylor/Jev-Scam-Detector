@@ -1,4 +1,5 @@
 import {
+  useEffect,
   forwardRef,
   useImperativeHandle,
   useLayoutEffect,
@@ -6,6 +7,7 @@ import {
   useState,
 } from "react";
 import type { Membership, Segment } from "./protocol";
+import { receiptTime } from "./assessment-view";
 
 export type TranscriptHandle = { jumpTo: (id: string) => void };
 type FollowMode = "following" | "reading";
@@ -17,18 +19,43 @@ function elapsed(milliseconds: number) {
 
 export const Transcript = forwardRef<
   TranscriptHandle,
-  { segments: Segment[]; role: Membership["role"]; evidenceIds: string[] }
->(function Transcript({ segments, role, evidenceIds }, ref) {
+  {
+    segments: Segment[];
+    role: Membership["role"];
+    evidenceIds: string[];
+    loading: boolean;
+  }
+>(function Transcript({ segments, role, evidenceIds, loading }, ref) {
   const viewport = useRef<HTMLDivElement>(null);
   const follow = useRef<FollowMode>("following");
   const [mode, setMode] = useState<FollowMode>("following");
   const anchor = useRef<{ id: string; offset: number } | null>(null);
   const size = useRef<{ width: number; height: number } | null>(null);
   const evidence = new Set(evidenceIds);
+  const previousIds = useRef(new Set<string>());
+  const [unread, setUnread] = useState(0);
+  const [highlight, setHighlight] = useState<{
+    id: string;
+    request: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const added = segments.filter(
+      (segment) => !previousIds.current.has(segment.id),
+    ).length;
+    previousIds.current = new Set(segments.map((segment) => segment.id));
+    if (follow.current === "reading" && added)
+      setUnread((current) => current + added);
+  }, [segments]);
+  useEffect(() => {
+    if (!highlight) return;
+    const timer = setTimeout(() => setHighlight(null), 2200);
+    return () => clearTimeout(timer);
+  }, [highlight]);
 
   function setFollow(next: FollowMode) {
     follow.current = next;
     setMode(next);
+    if (next === "following") setUnread(0);
   }
   function readHistory() {
     const node = viewport.current;
@@ -60,6 +87,10 @@ export const Transcript = forwardRef<
           behavior: "instant",
         });
         target.focus({ preventScroll: true });
+        setHighlight((current) => ({
+          id,
+          request: (current?.request ?? 0) + 1,
+        }));
       },
     }),
     [],
@@ -188,7 +219,7 @@ export const Transcript = forwardRef<
                 key={segment.id}
                 data-segment-id={segment.id}
                 tabIndex={-1}
-                className={`${segment.speaker === role ? "local" : "remote"} ${evidence.has(segment.id) ? "evidence-line" : ""}`}
+                className={`${segment.speaker === role ? "local" : "remote"} ${evidence.has(segment.id) ? "evidence-line" : ""} ${highlight?.id === segment.id ? "evidence-highlight" : ""}`}
               >
                 <div className="bubble-meta">
                   <strong className="speaker">
@@ -199,8 +230,16 @@ export const Transcript = forwardRef<
                         : "Guest"}
                   </strong>
                   <span>
-                    {segment.source === "manual" ? "typed" : "transcribed"} ·{" "}
-                    <time>{elapsed(segment.startMs)}</time>
+                    {segment.source === "manual"
+                      ? "Typed"
+                      : "Transcribed audio"}{" "}
+                    ·{" "}
+                    <time
+                      dateTime={segment.createdAt}
+                      title={`Server receipt ${segment.createdAt}. Session offset ${elapsed(segment.startMs)}.`}
+                    >
+                      {receiptTime(segment.createdAt)}
+                    </time>
                   </span>
                 </div>
                 <p>{segment.text}</p>
@@ -211,14 +250,23 @@ export const Transcript = forwardRef<
             ))}
           </ol>
         ) : (
-          <p className="empty">No lines yet. Add a typed line below.</p>
+          <div className="empty">
+            <h3>{loading ? "CONNECTING" : "NO LINES YET"}</h3>
+          </div>
         )}
       </div>
-      {mode === "reading" && (
-        <button className="latest-messages" type="button" onClick={latest}>
-          Latest messages
-        </button>
-      )}
+      <div className="transcript-follow" aria-live="polite">
+        {mode === "reading" ? (
+          <button className="latest-messages" type="button" onClick={latest}>
+            {unread
+              ? `${unread} new ${unread === 1 ? "line" : "lines"} · `
+              : ""}
+            Latest messages
+          </button>
+        ) : (
+          <span className="sr-only">Following latest messages.</span>
+        )}
+      </div>
     </section>
   );
 });
