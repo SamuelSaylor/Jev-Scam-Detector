@@ -190,8 +190,8 @@ export default function App() {
             J
           </span>
           <span className="brand-word">
-            <span>JEV</span>
-            <span aria-hidden="true">JEV</span>
+            <span>Jev Scam Detector</span>
+            <span aria-hidden="true">Jev Scam Detector</span>
           </span>
         </span>
         <span className="top-note">SECOND OPINION</span>
@@ -508,10 +508,8 @@ export default function App() {
                 CHECK
               </span>
               <h1>
-                <span className="title-line">HEAR THE</span>
-                <span className="title-line accent">PERSON</span>
-                <span className="title-line">CHECK THE</span>
-                <span className="title-line accent">WORDS</span>
+                <span className="title-line">CATCHING SCAMMERS</span>
+                <span className="title-line accent live">LIVE!</span>
               </h1>
             </div>
             <p className="lede">
@@ -527,9 +525,6 @@ export default function App() {
             </div>
           </div>
           <form className="entry" onSubmit={(event) => void join(event)}>
-            <span className="entry-ribbon" aria-hidden="true">
-              START
-            </span>
             <h2>Start or join</h2>
             <fieldset>
               <legend>Review mode</legend>
