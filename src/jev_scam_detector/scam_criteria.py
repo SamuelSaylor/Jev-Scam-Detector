@@ -21,11 +21,12 @@ CRITERIA = (
     Criterion(
         Indicator.CREDENTIALS,
         "Someone asks another participant to disclose a password, PIN, one-time verification code, "
-        "bank login, card details, or identity documents. Distinguish entering a code in an official "
-        "app from sharing it with the caller. Exclude programming codes and scam warnings.",
+        "bank login, card details, wallet recovery or seed phrase, or identity documents. "
+        "Distinguish entering a code in an official app from sharing it with the caller. "
+        "Exclude programming codes and scam warnings.",
         "requests for private credentials or verification codes",
         (
-            r"\b(?:send|tell|read|share|give|provide|confirm)\b.{0,60}\b(?:code|password|pin|otp|card details|bank login|social security)\b",
+            r"\b(?:send|tell|read|share|give|provide|confirm)\b.{0,60}\b(?:(?:verification|authentication|security|login|one[- ]time) code|password|pin|otp|card details|bank login|social security|(?:recovery|seed) phrase)\b",
         ),
         True,
     ),
@@ -36,7 +37,10 @@ CRITERIA = (
         "Normal invoices, financial discussion, and ordinary transfers alone are not evidence.",
         "unusual or supposedly protective payment requests",
         (
-            r"\b(?:send|transfer|move|wire|pay|buy|purchase|deposit)\b.{0,100}\b(?:safe account|secure account|gift cards?|bitcoin|crypto|wallet|courier)\b",
+            r"\b(?:send|transfer|move|wire|pay|buy|purchase|deposit)\b.{0,100}\b(?:safe account|secure account|bitcoin|crypto|wallet|courier)\b",
+            r"\b(?:pay|send|transfer|move|wire|deliver|mail|give)\b.{0,100}\bgift cards?\b",
+            r"\b(?:buy|purchase)\b.{0,60}\bgift cards?\b.{0,60}\b(?:pay\b|(?:send|transfer|deliver|mail|give|read|share|tell|provide)\b.{0,40}\b(?:them|cards?|codes?|numbers?|pins?|redemption details)\b)",
+            r"\b(?:read|share|tell|provide)\b.{0,60}\bgift cards?\b.{0,30}\b(?:codes?|numbers?|pins?|redemption details)\b",
             r"\b(?:refund|return|send back)\b.{0,60}\b(?:overpayment|overpaid|extra money)\b",
         ),
         True,
@@ -92,6 +96,7 @@ CRITERIA = (
         "upfront fees to unlock promised money or benefits",
         (
             r"\b(?:pay|send|deposit)\b.{0,50}\b(?:fee|tax|deposit)\b.{0,80}\b(?:prize|winnings|inheritance|grant|job|loan|withdraw|recover|release|unlock)\b",
+            r"\b(?:pay|send|deposit)\b.{0,50}\bto unlock\b.{0,40}\b(?:withdrawal|earnings|wages)\b",
         ),
         True,
     ),

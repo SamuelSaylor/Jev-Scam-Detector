@@ -28,11 +28,17 @@ from jev_scam_detector.providers import DemoAssessor
             AssessmentDecision(0.9, ("seg_1",), indicators=(Indicator.CREDENTIALS,)),
         ),
         (
-            (("host", "SEND THE CODE"), ("guest", "I won’t send the code")),
+            (
+                ("host", "SEND THE VERIFICATION CODE"),
+                ("guest", "I won’t send the code"),
+            ),
             AssessmentDecision(0.9, ("seg_1",), indicators=(Indicator.CREDENTIALS,)),
         ),
         (
-            (("host", "Send the code"), ("host", "Actually, give me your password")),
+            (
+                ("host", "Send the verification code"),
+                ("host", "Actually, give me your password"),
+            ),
             AssessmentDecision(
                 0.9,
                 ("seg_1", "seg_2"),
@@ -40,7 +46,10 @@ from jev_scam_detector.providers import DemoAssessor
             ),
         ),
         (
-            (("host", "Send the code"), ("guest", "Actually, give me your password")),
+            (
+                ("host", "Send the verification code"),
+                ("guest", "Actually, give me your password"),
+            ),
             AssessmentDecision(
                 0.9, ("seg_1", "seg_2"), indicators=(Indicator.CREDENTIALS,)
             ),
@@ -48,28 +57,30 @@ from jev_scam_detector.providers import DemoAssessor
         (
             (
                 ("host", "I am calling from your bank"),
-                ("host", "Actually, send the code"),
+                ("host", "Actually, send the verification code"),
             ),
             AssessmentDecision(
                 0.9,
-                ("seg_1", "seg_2"),
-                indicators=(Indicator.CREDENTIALS, Indicator.IMPERSONATION),
+                ("seg_2",),
+                indicators=(Indicator.CREDENTIALS,),
             ),
         ),
         (
             (
-                ("host", "Send the code"),
+                ("host", "Send the verification code"),
                 ("guest", "No"),
-                ("host", "Send the code"),
+                ("host", "Send the verification code"),
             ),
             AssessmentDecision(
-                0.9, ("seg_1", "seg_3"), indicators=(Indicator.CREDENTIALS,)
+                0.9,
+                ("seg_1", "seg_3"),
+                indicators=(Indicator.CREDENTIALS, Indicator.PERSISTENCE),
             ),
         ),
         (
             (
                 ("guest", "No"),
-                ("host", "Send the code"),
+                ("host", "Send the verification code"),
                 ("host", "Give me your password"),
             ),
             AssessmentDecision(
@@ -78,7 +89,7 @@ from jev_scam_detector.providers import DemoAssessor
         ),
         (
             (
-                ("guest", "Send the code"),
+                ("guest", "Send the verification code"),
                 ("host", "No"),
                 ("guest", "Hello"),
                 ("guest", "Actually, give me your password instead"),
@@ -96,9 +107,9 @@ from jev_scam_detector.providers import DemoAssessor
         (
             (("host", "Act now"), ("guest", "I am calling from your bank")),
             AssessmentDecision(
-                0.5,
-                ("seg_1", "seg_2"),
-                indicators=(Indicator.IMPERSONATION, Indicator.URGENCY),
+                0.1,
+                ("seg_1",),
+                indicators=(Indicator.URGENCY,),
             ),
         ),
     ],
@@ -114,7 +125,7 @@ def test_demo_preserves_context_and_ordered_decision(
 
 
 def test_demo_replaces_findings_for_repeated_segment_ids() -> None:
-    first = Segment("same", "host", 1, "Send the code", "manual", "", 0, 0)
+    first = Segment("same", "host", 1, "Send the verification code", "manual", "", 0, 0)
     second = replace(first, client_seq=2, text="Act now")
     assert asyncio.run(DemoAssessor().assess((first, second))) == AssessmentDecision(
         0.1, ("same",), indicators=(Indicator.URGENCY,)

@@ -23,7 +23,7 @@ from jev_scam_detector.scam_criteria import (
 
 UNVALIDATED_EXAMPLE_EVIDENCE_THRESHOLD = 0.7
 DEMO_SAFETY_CONTEXT = re.compile(
-    r"\b(?:never (?:ask|request|share|send|give|install)|(?:do not|don't|dont) (?:share|send|give|install)|"
+    r"\b(?:never (?:ask|request|share|send|give|provide|install|pay|deposit)|(?:do not|don't|dont) (?:share|send|give|provide|install|pay|deposit)|"
     + r"i (?:will not|won't|wont|refuse to)|(?:the scammer (?:asked|said|told)|scammers (?:ask|request)|"
     + r"scam example|safety advice|for example|beware|they said|he said|she said)|"
     + r"(?:not|no) guaranteed|not risk.free|(?:programming|source|discount|promo) code)\b"
@@ -43,7 +43,12 @@ class DemoAssessor:
         findings: dict[str, set[Indicator]] = {}
         last_risky_by_speaker: dict[Role, Segment] = {}
         challenged_speakers: set[Role] = set()
+        seen_segments: set[Segment] = set()
         for segment in segments:
+            # Re-delivery is not another spoken turn, including after a refusal.
+            if segment in seen_segments:
+                continue
+            seen_segments.add(segment)
             text = segment.text.casefold().replace("’", "'")
             if DEMO_REFUSAL.search(text):
                 challenged_speakers.update(
@@ -51,11 +56,14 @@ class DemoAssessor:
                 )
             hits = {
                 c.indicator
-                for clause in re.split(r"[.!?;]", text)
+                for clause in re.split(r"[.!?;]|,\s*but\b", text)
                 if not DEMO_SAFETY_CONTEXT.search(clause)
                 for c in CRITERIA
                 if any(re.search(pattern, clause) for pattern in c.demo_patterns)
             }
+            # Affiliation alone is not evidence of a suspicious purpose.
+            if not hits - {Indicator.IMPERSONATION, Indicator.STORY_CHANGE}:
+                hits.discard(Indicator.IMPERSONATION)
             risky = not strong_indicators.isdisjoint(hits)
             prior = last_risky_by_speaker.get(segment.speaker)
             if not (risky and prior):
@@ -63,7 +71,7 @@ class DemoAssessor:
             if risky:
                 if (
                     prior
-                    and prior.text != segment.text
+                    and prior.id != segment.id
                     and segment.speaker in challenged_speakers
                 ):
                     hits.add(Indicator.PERSISTENCE)

@@ -12,7 +12,7 @@ THREAD = {
         {
             "id": "l2",
             "sender": "boss@example.com",
-            "text": "Send the code you just got.",
+            "text": "Send the verification code you just got.",
         },
     ]
 }
@@ -53,7 +53,7 @@ def test_live_assessor_is_used_and_unknown_evidence_is_dropped(
         body = client.post("/api/emails/scan", json=THREAD).json()
     assert body == {"risk": 0.35, "evidenceIds": ["l1"], "provider": "jev"}
     assert [s.speaker for s in fake.seen] == ["host", "host"]
-    assert fake.seen[1].text == "Send the code you just got."
+    assert fake.seen[1].text == "Send the verification code you just got."
 
 
 def test_second_sender_is_the_guest(monkeypatch: MonkeyPatch) -> None:

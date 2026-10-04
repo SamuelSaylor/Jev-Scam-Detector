@@ -84,7 +84,7 @@ def test_demo_combines_weak_signals_without_treating_identity_as_proven() -> Non
     pressure = asyncio.run(
         assessor.assess(lines("I am calling from your bank. Act now"))
     )
-    assert introduction.risk == 0.1
+    assert introduction == AssessmentDecision(0.1, ())
     assert pressure.risk == 0.5
     assert pressure.indicators == (Indicator.IMPERSONATION, Indicator.URGENCY)
 
@@ -120,7 +120,7 @@ def test_old_evidence_remains_in_assessment_input() -> None:
         store = SessionStore()
         room, _ = await store.create("demo")
         for i, segment in enumerate(
-            lines("Send the code", *["Normal conversation"] * 24)
+            lines("Send the verification code", *["Normal conversation"] * 24)
         ):
             _ = store.append(
                 room, "host", i + 1, segment.text, "manual", str(i), timestamp()
@@ -225,7 +225,7 @@ def test_last_result_and_summary_survive_failure_and_websocket_reconnect(
         first = client.post(
             f"{url}/transcripts",
             headers=headers,
-            json={"clientSeq": 1, "text": "Send the code"},
+            json={"clientSeq": 1, "text": "Send the verification code"},
         )
         assert first.status_code == 201
         asyncio.run(backend.assess_pending())
