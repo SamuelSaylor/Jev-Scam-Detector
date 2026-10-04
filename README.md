@@ -70,3 +70,4 @@ The default [`frontend/public/config.json`](frontend/public/config.json) has a p
 - [API and WebSocket contract](docs/api-contract.md)
 - [Architecture and provider boundaries](docs/architecture.md)
 - [Example wire messages](contracts/examples.json)
+- [Verification results and remaining limits](docs/verification.md)
