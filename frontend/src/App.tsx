@@ -186,9 +186,7 @@ export default function App() {
     <div className="shell">
       <header className="topbar">
         <span className="brand">
-          <span className="brand-icon" aria-hidden="true">
-            J
-          </span>
+          <img className="brand-logo" src="/logo.png" alt="" />
           <span className="brand-word">
             <span>Jev Scam Detector</span>
             <span aria-hidden="true">Jev Scam Detector</span>
@@ -502,6 +500,7 @@ export default function App() {
         <main className="welcome">
           <div className="burst" aria-hidden="true" />
           <div className="intro">
+            <img className="hero-logo" src="/logo.png" alt="Jev Scam Detector" />
             <p className="context stamp">CALL CHECK</p>
             <div className="title-stack">
               <span className="ghost-copy" aria-hidden="true">
@@ -580,7 +579,11 @@ export default function App() {
         </main>
       )}
       <footer>
-        Jev call demo <span>0.2.0</span>
+        <div className="footer-brand">
+          <img className="footer-logo" src="/logo.png" alt="" />
+          Jev call demo
+        </div>
+        <span>0.2.0</span>
       </footer>
     </div>
   );
