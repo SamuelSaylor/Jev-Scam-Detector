@@ -152,18 +152,30 @@ button:not(:disabled):active {
   z-index: 1;
 }
 
-.brand-icon {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  background: var(--red);
-  color: var(--white);
-  border: 3px solid var(--white);
-  font-family: var(--font-display);
-  font-size: 18px;
-  transform: rotate(-8deg);
-  box-shadow: 3px 3px 0 #000;
+.brand-logo {
+  height: 48px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(3px 3px 0 #000);
+}
+
+.hero-logo {
+  display: block;
+  height: clamp(72px, 12vw, 120px);
+  width: auto;
+  margin-bottom: 14px;
+  filter: drop-shadow(4px 4px 0 var(--red));
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-logo {
+  height: 22px;
+  width: auto;
 }
 
 .brand-word {
