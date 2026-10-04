@@ -119,6 +119,7 @@ export function updatedSnapshot(state: Snapshot, incoming: Event): Snapshot {
     case "snapshot":
       return incoming.snapshot;
     case "peer":
+      if (incoming.role === state.role) return state;
       return {
         ...state,
         peer: {

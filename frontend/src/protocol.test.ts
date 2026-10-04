@@ -65,6 +65,28 @@ describe("wire event boundary", () => {
       ),
     ).toThrow();
   });
+  it("ignores self peer broadcasts and tracks the remote seat", () => {
+    const self = decodeEvent(
+      JSON.stringify({
+        type: "peer", role: "host", joined: true, connected: true,
+      }),
+    );
+    expect(updatedSnapshot(base, self).peer).toEqual({
+      role: "guest",
+      joined: false,
+      connected: false,
+    });
+    const remote = decodeEvent(
+      JSON.stringify({
+        type: "peer", role: "guest", joined: true, connected: true,
+      }),
+    );
+    expect(updatedSnapshot(base, remote).peer).toEqual({
+      role: "guest",
+      joined: true,
+      connected: true,
+    });
+  });
   it("marks a newer line unassessed, deduplicates repeated events, and does not turn unavailable into safety", () => {
     const textEvent = decodeEvent(
       JSON.stringify({ type: "transcript", segment }),

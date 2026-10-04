@@ -146,7 +146,11 @@ export class Room {
           .map((segment) => segment.clientSeq),
       );
     }
-    if (message.type === "peer" && !message.connected) this.resetPeer();
+    if (
+      message.type === "peer" &&
+      message.role !== this.member.role &&
+      !message.connected
+    ) this.resetPeer();
     if (this.state) this.state = updatedSnapshot(this.state, message);
     else if (message.type === "snapshot") this.state = message.snapshot;
     if (this.state) this.callbacks.onSnapshot(this.state);
@@ -161,7 +165,8 @@ export class Room {
       await this.handleSignal(message.data);
     }
     if (
-      (message.type === "peer" || message.type === "snapshot") &&
+      (message.type === "snapshot" ||
+        (message.type === "peer" && message.role !== this.member.role)) &&
       this.state?.peer.connected &&
       this.member.role === "host" &&
       !this.connection

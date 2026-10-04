@@ -95,7 +95,7 @@ def test_socket_replacement_closes_old_connection() -> None:
     with TestClient(backend.app) as client:
         session = client.post("/api/sessions", json={"mode": "demo"}).json()
         url = f"/api/sessions/{session['sessionId']}/events"
-        origin = {"origin": "http://localhost:5173"}
+        origin = {"origin": "http://127.0.0.1:5173"}
         with client.websocket_connect(url, headers=origin) as original:
             original.send_json(
                 {"type": "auth", "participantToken": session["participantToken"]}

@@ -17,7 +17,7 @@ from jev_scam_detector.domain import (
 from jev_scam_detector.providers import DemoAssessor
 from jev_scam_detector.sessions import SessionStore
 
-ORIGIN = {"origin": "http://localhost:5173"}
+ORIGIN = {"origin": "http://127.0.0.1:5173"}
 
 
 def setup(client: TestClient) -> tuple[str, str, str]:

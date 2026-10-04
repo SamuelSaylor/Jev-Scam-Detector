@@ -194,7 +194,9 @@ export default function App() {
         <main className="call-layout">
           <section className="call-header" aria-label="Call details">
             <div>
-              <p className="context">Private two-person room</p>
+              <p className="context">
+                Private two-person room · {active.member.mode === "demo" ? "Demo mode" : "Live mode"}
+              </p>
               <h1>
                 Stay on the line.
                 <br />

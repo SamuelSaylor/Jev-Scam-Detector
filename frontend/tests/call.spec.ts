@@ -1,9 +1,49 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 
+declare global {
+  interface Window {
+    __peers: RTCPeerConnection[];
+  }
+}
+
 async function participant(context: BrowserContext) {
+  await context.addInitScript(() => {
+    window.__peers = [];
+    const NativePeer = window.RTCPeerConnection;
+    window.RTCPeerConnection = class extends NativePeer {
+      constructor(...args: ConstructorParameters<typeof RTCPeerConnection>) {
+        super(...args);
+        window.__peers.push(this);
+      }
+    };
+  });
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:5173/");
   return page;
+}
+
+async function inboundAudio(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        for (const peer of window.__peers) {
+          if (peer.connectionState !== "connected") continue;
+          const stats = await peer.getStats();
+          for (const report of stats.values()) {
+            if (
+              report.type === "inbound-rtp" &&
+              report.kind === "audio" &&
+              report.packetsReceived > 0 &&
+              report.bytesReceived > 0
+            ) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }),
+    )
+    .toBe(true);
 }
 
 async function remoteTrack(page: Page) {
@@ -54,6 +94,8 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     await guest.getByRole("button", { name: "Connect microphone" }).click();
     await remoteTrack(host);
     await remoteTrack(guest);
+    await inboundAudio(host);
+    await inboundAudio(guest);
     for (const page of [host, guest]) {
       await expect
         .poll(() =>
@@ -75,6 +117,7 @@ test("two browsers connect audio, review typed lines, then end the shared room",
       host.getByRole("button", { name: "Unmute microphone" }),
     ).toBeVisible();
     await host.getByRole("button", { name: "Unmute microphone" }).click();
+    const submittedAt = Date.now();
     await host
       .getByLabel("Add a line to the shared timeline")
       .fill("Send the code now");
@@ -83,7 +126,22 @@ test("two browsers connect audio, review typed lines, then end the shared room",
       .getByLabel("Add a line to the shared timeline")
       .fill("I will call the bank myself");
     await guest.getByRole("button", { name: "Add typed line" }).click();
-    for (const page of [host, guest]) {
+    for (const [page, hostLabel, guestLabel] of [
+      [host, "You · typed", "Guest · typed"],
+      [guest, "Host · typed", "You · typed"],
+    ] as const) {
+      await expect(
+        page
+          .locator(".timeline li")
+          .filter({ hasText: "Send the code now" })
+          .locator(".speaker"),
+      ).toHaveText(hostLabel);
+      await expect(
+        page
+          .locator(".timeline li")
+          .filter({ hasText: "I will call the bank myself" })
+          .locator(".speaker"),
+      ).toHaveText(guestLabel);
       await expect(
         page.getByText("Send the code now", { exact: true }),
       ).toBeVisible();
@@ -97,7 +155,15 @@ test("two browsers connect audio, review typed lines, then end the shared room",
         page.getByRole("link", { name: /Send the code now/ }),
       ).toBeVisible();
       await expect(page.getByText("Referenced evidence")).toBeVisible();
+      const evidence = page.getByRole("link", { name: /Send the code now/ });
+      const segmentId = await page
+        .locator(".timeline li")
+        .filter({ hasText: "Send the code now" })
+        .getAttribute("id");
+      expect(segmentId).toBeTruthy();
+      expect(await evidence.getAttribute("href")).toBe(`#${segmentId}`);
     }
+    expect(Date.now() - submittedAt).toBeLessThan(15000);
     await guest.getByRole("button", { name: "Reconnect to room" }).click();
     await expect(host.getByRole("status")).toContainText(
       "Audio peer connected",
@@ -107,6 +173,8 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     );
     await remoteTrack(host);
     await remoteTrack(guest);
+    await inboundAudio(host);
+    await inboundAudio(guest);
     const phone = await browser.newContext({
       viewport: { width: 390, height: 844 },
       deviceScaleFactor: 1,
@@ -114,6 +182,7 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     try {
       const phonePage = await participant(phone);
       await phonePage.getByRole("button", { name: "Create room" }).click();
+      await expect(phonePage.locator(".call-header .context")).toContainText("Demo mode");
       await expect(
         phonePage.getByRole("heading", { name: "What the text suggests" }),
       ).toBeVisible();
