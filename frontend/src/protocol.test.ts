@@ -28,6 +28,10 @@ const assessment = {
   mode: "demo",
   provider: "demo-rule",
   risk: 0.8,
+  confidence: null,
+  suspicionLevel: "high",
+  indicators: ["credentials"],
+  summary: "High suspicion: requests for private credentials or verification codes.",
   evidenceSegmentIds: ["one"],
   throughSegmentId: "one",
   createdAt: "2026-01-01T00:00:05Z",
@@ -64,6 +68,17 @@ describe("wire event boundary", () => {
         }),
       ),
     ).toThrow();
+    for (const invalid of [
+      { ...assessment, confidence: 1.1 },
+      { ...assessment, scamType: "invented" },
+      { ...assessment, scamTypeConfidence: 1.1 },
+      { ...assessment, indicators: ["invented"] },
+      { ...assessment, summary: "" },
+    ]) {
+      expect(() => decodeEvent(JSON.stringify({
+        type: "assessment", assessment: invalid,
+      }))).toThrow();
+    }
   });
   it("ignores self peer broadcasts and tracks the remote seat", () => {
     const self = decodeEvent(
@@ -87,7 +102,7 @@ describe("wire event boundary", () => {
       connected: true,
     });
   });
-  it("marks a newer line unassessed, deduplicates repeated events, and does not turn unavailable into safety", () => {
+  it("retains the last successful assessment during updates and outages and deduplicates events", () => {
     const textEvent = decodeEvent(
       JSON.stringify({ type: "transcript", segment }),
     );
@@ -99,6 +114,7 @@ describe("wire event boundary", () => {
       assessmentEvent,
     );
     expect(assessed.currentRisk).toBe(0.8);
+    expect(updatedSnapshot(assessed, assessmentEvent).assessments).toHaveLength(1);
     expect(updatedSnapshot(assessed, textEvent).segments).toHaveLength(1);
     const newer = decodeEvent(
       JSON.stringify({
@@ -106,7 +122,9 @@ describe("wire event boundary", () => {
         segment: { ...segment, id: "two", clientSeq: 2, text: "Hello" },
       }),
     );
-    expect(updatedSnapshot(assessed, newer).currentRisk).toBeNull();
+    const pending = updatedSnapshot(assessed, newer);
+    expect(pending.currentRisk).toBe(0.8);
+    expect(pending.assessments.at(-1)?.summary).toBe(assessment.summary);
     const unavailable = decodeEvent(
       JSON.stringify({
         type: "provider_status",
@@ -114,6 +132,27 @@ describe("wire event boundary", () => {
         status: "unavailable",
       }),
     );
-    expect(updatedSnapshot(assessed, unavailable).currentRisk).toBeNull();
+    const failed = updatedSnapshot(pending, unavailable);
+    expect(failed.currentRisk).toBe(0.8);
+    expect(failed.providerStatus.assessment).toBe("unavailable");
+    const reconnected = updatedSnapshot(base, decodeEvent(JSON.stringify({
+      type: "snapshot", snapshot: failed,
+    })));
+    expect(reconnected.currentRisk).toBe(0.8);
+    expect(reconnected.assessments.at(-1)?.summary).toBe(assessment.summary);
+    const failedBeforeFirstResult = updatedSnapshot(base, unavailable);
+    expect(failedBeforeFirstResult.currentRisk).toBeNull();
+    expect(failedBeforeFirstResult.assessments).toHaveLength(0);
+  });
+  it("shows a completed result even if additional lines arrived during its review", () => {
+    const first = decodeEvent(JSON.stringify({ type: "transcript", segment }));
+    const newer = decodeEvent(JSON.stringify({
+      type: "transcript", segment: { ...segment, id: "two", clientSeq: 2 },
+    }));
+    const result = decodeEvent(JSON.stringify({ type: "assessment", assessment }));
+    const state = updatedSnapshot(updatedSnapshot(updatedSnapshot(base, first), newer), result);
+    expect(state.currentRisk).toBe(0.8);
+    expect(state.assessments.at(-1)?.throughSegmentId).toBe("one");
+    expect(state.segments.at(-1)?.id).toBe("two");
   });
 });

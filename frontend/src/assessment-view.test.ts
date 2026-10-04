@@ -18,6 +18,10 @@ const review: Assessment = {
   mode: "demo",
   provider: "demo-rule",
   risk: 0,
+  confidence: null,
+  suspicionLevel: "low",
+  indicators: [],
+  summary: "Low suspicion: no clear scam indicators detected.",
   evidenceSegmentIds: ["missing", "one"],
   throughSegmentId: "one",
   createdAt: "2026-01-01T00:00:01Z",
@@ -36,80 +40,119 @@ const empty: Snapshot = {
   providerStatus: { transcription: "available", assessment: "available" },
 };
 
+function assessed(risk: number): Snapshot {
+  return {
+    ...empty,
+    segments: [line],
+    assessments: [{ ...review, risk }],
+    currentRisk: risk,
+  };
+}
+
 describe("call assessment view", () => {
   it("distinguishes empty, waiting and unavailable without a zero score", () => {
+    expect(assessmentView(null)).toEqual({ kind: "unassessed" });
     expect(assessmentView(empty)).toEqual({ kind: "unassessed" });
     expect(assessmentView({ ...empty, segments: [line] })).toEqual({
-      kind: "pending",
-      earlierEvidence: [],
+      kind: "pending", earlierEvidence: [],
     });
-    expect(
-      assessmentView({
-        ...empty,
-        providerStatus: { ...empty.providerStatus, assessment: "unavailable" },
-      }),
-    ).toEqual({ kind: "unavailable", earlierEvidence: [] });
-  });
-  it("shows only exact available evidence and preserves genuine zero and one", () => {
-    const ready = {
+    expect(assessmentView({
       ...empty,
-      segments: [line],
-      assessments: [review],
-      currentRisk: 0,
-    };
-    expect(assessmentView(ready)).toEqual({
+      providerStatus: { ...empty.providerStatus, assessment: "unavailable" },
+    })).toEqual({ kind: "unavailable", earlierEvidence: [] });
+  });
+
+  it("shows only exact available evidence", () => {
+    expect(assessmentView(assessed(0))).toEqual({
       kind: "ready",
+      freshness: "current",
       risk: 0,
       provider: "demo-rule",
-      evidence: [
-        { id: "one", speaker: "host", text: "Send the code", startMs: 5000 },
-      ],
-    });
-    expect(assessmentView({ ...ready, currentRisk: 1 })).toMatchObject({
-      kind: "ready",
-      risk: 1,
-    });
-    expect(assessmentCopy("demo", assessmentView(ready))).toEqual({
-      likelihood: "0%",
-      sentence: "Sample rule estimates a 0% likelihood of a scam.",
-    });
-    expect(assessmentCopy("live", assessmentView({ ...ready, currentRisk: 0.755 }))).toEqual({
-      likelihood: "76%",
-      sentence: "Jev estimates a 76% likelihood of a scam.",
-    });
-    expect(assessmentCopy("live", assessmentView({ ...ready, currentRisk: 1 }))).toEqual({
-      likelihood: "100%",
-      sentence: "Jev estimates a 100% likelihood of a scam.",
+      scamType: null,
+      scamTypeConfidence: null,
+      evidence: [{ id: "one", speaker: "host", text: "Send the code", startMs: 5000 }],
     });
   });
-  it("keeps earlier evidence neutral after new lines, outage and provider recovery", () => {
-    const covered = {
-      ...empty,
-      segments: [line],
-      assessments: [review],
-      currentRisk: null,
+
+  it.each([0, 0.755, 1])("preserves genuine scores and rounds %s for display", (risk) => {
+    const view = assessmentView(assessed(risk));
+    expect(view).toMatchObject({ kind: "ready", freshness: "current", risk });
+    const likelihood = `${Math.round(risk * 100)}%`;
+    expect(assessmentCopy("live", view)).toEqual({
+      likelihood, sentence: `Jev suspicion score: ${likelihood}.`,
+    });
+    expect(assessmentCopy("demo", view)).toEqual({
+      likelihood, sentence: `Sample rule suspicion score: ${likelihood}.`,
+    });
+  });
+
+  it.each([0, 0.8, 1])("keeps the previous %s score through rapid arrivals and reconnect snapshots", (risk) => {
+    const before = assessed(risk);
+    for (const count of [1, 2, 3]) {
+      const updating: Snapshot = {
+        ...before,
+        currentRisk: null,
+        segments: [line, ...Array.from({ length: count }, (_, i) => ({
+          ...line, id: `new_${i}`, clientSeq: i + 2,
+        }))],
+      };
+      const view = assessmentView(updating);
+      expect(view).toMatchObject({
+        kind: "ready", freshness: "updating", risk,
+        evidence: [{ id: "one" }],
+      });
+      expect(assessmentCopy("live", view)).toEqual(
+        assessmentCopy("live", assessmentView(before)),
+      );
+      const latest = updating.segments.at(-1);
+      if (!latest) throw new Error("Expected a new transcript line");
+      const nextRisk = risk === 0 ? 0.9 : 0;
+      expect(assessmentView({
+        ...updating,
+        currentRisk: nextRisk,
+        assessments: [...before.assessments, {
+          ...review, id: "next", risk: nextRisk, throughSegmentId: latest.id,
+        }],
+      })).toMatchObject({ kind: "ready", freshness: "current", risk: nextRisk });
+    }
+  });
+
+  it("uses the latest successful assessment even if currentRisk is cleared", () => {
+    expect(assessmentView({ ...assessed(0.8), currentRisk: null })).toMatchObject({
+      kind: "ready", freshness: "updating", risk: 0.8,
+    });
+    expect(assessmentView({ ...assessed(0.8), currentRisk: 0 })).toMatchObject({
+      kind: "ready", risk: 0.8,
+    });
+  });
+
+  it("retains classification while updating but hides it during provider failures", () => {
+    const classified: Snapshot = {
+      ...assessed(0.9),
+      mode: "live",
+      assessments: [{
+        ...review, risk: 0.9, mode: "live", provider: "jev",
+        scamType: "credential_theft", scamTypeConfidence: 0.85,
+      }],
     };
-    expect(assessmentCopy("live", assessmentView(covered))).toEqual({
-      likelihood: "Pending", sentence: "Waiting for a review.",
+    expect(assessmentView(classified)).toMatchObject({
+      kind: "ready", freshness: "current",
+      scamType: "credential_theft", scamTypeConfidence: 0.85,
     });
-    expect(assessmentView(covered)).toMatchObject({
-      kind: "pending",
-      earlierEvidence: [{ id: "one" }],
+    expect(assessmentView({
+      ...classified, segments: [line, { ...line, id: "two", clientSeq: 2 }],
+    })).toMatchObject({
+      kind: "ready", freshness: "updating",
+      scamType: "credential_theft", scamTypeConfidence: 0.85,
     });
-    expect(
-      assessmentView({
-        ...covered,
-        providerStatus: {
-          ...covered.providerStatus,
-          assessment: "unavailable",
-        },
-      }),
-    ).toMatchObject({ kind: "unavailable", earlierEvidence: [{ id: "one" }] });
-    expect(assessmentCopy("live", assessmentView({
-      ...covered, segments: [line, { ...line, id: "two", clientSeq: 2 }],
-    }))).toEqual({ likelihood: "Earlier review", sentence: "New lines await review." });
-    expect(assessmentCopy("live", assessmentView({
-      ...covered, providerStatus: { ...covered.providerStatus, assessment: "unavailable" },
-    }))).toEqual({ likelihood: "Unavailable", sentence: "Review unavailable." });
+    const failed = assessmentView({
+      ...classified,
+      providerStatus: { ...classified.providerStatus, assessment: "unavailable" },
+    });
+    expect(failed).toMatchObject({ kind: "unavailable", earlierEvidence: [{ id: "one" }] });
+    expect(failed).not.toHaveProperty("scamType");
+    expect(assessmentCopy("live", failed)).toEqual({
+      likelihood: "Unavailable", sentence: "Review unavailable.",
+    });
   });
 });

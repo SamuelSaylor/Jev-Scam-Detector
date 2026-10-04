@@ -58,6 +58,7 @@ export default function App() {
         onMessage: setMessage,
         onEnd: () => {
           recorder.current?.stop();
+          recorder.current = null;
           room.current?.stop();
           room.current = null;
           setScreen({ kind: "lobby" });
@@ -71,6 +72,7 @@ export default function App() {
       room.current = instance;
       setScreen({ kind: "call", member, snapshot: null });
       void instance.open();
+      if (member.mode === "live") void connectMicrophone();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Cannot enter the room.",
@@ -88,6 +90,7 @@ export default function App() {
       if (room.current !== active || !active.stream) return;
       setMicrophone("on");
       setMessage("");
+      if (active.member.mode === "live") startRecording(active);
     } catch {
       if (room.current !== active) return;
       setMicrophone("denied");
@@ -104,13 +107,19 @@ export default function App() {
       setRecording(false);
       return;
     }
-    if (!room.current || !ClipRecorder.supported() || !room.current.stream) {
+    if (room.current) startRecording(room.current);
+  }
+
+  function startRecording(active: Room) {
+    if (recorder.current || room.current !== active) return;
+    if (!ClipRecorder.supported() || !active.stream) {
       setMessage(
         "Connect a microphone in a supported browser to transcribe live audio. Typed text still works.",
       );
       return;
     }
-    const next = new ClipRecorder(room.current, (error) => {
+    const next = new ClipRecorder(active, (error) => {
+      if (room.current !== active || recorder.current !== next) return;
       setMessage(error);
       setRecording(false);
       recorder.current = null;
@@ -121,6 +130,7 @@ export default function App() {
       setRecording(true);
       setMessage("");
     } catch (error) {
+      void next.stop();
       setMessage(
         error instanceof Error ? error.message : "Recording is unavailable.",
       );
@@ -417,9 +427,8 @@ export default function App() {
           <img className="footer-logo" src="/logo.png" alt="" />
           Jev call demo
         </div>
-        <span>0.3.0</span>
+        <span>0.4.0</span>
       </footer>
-      
     </div>
   );
 }

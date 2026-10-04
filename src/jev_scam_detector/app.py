@@ -4,6 +4,7 @@ import asyncio
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, cast
 from urllib.parse import urlsplit
@@ -100,13 +101,60 @@ demo_assessor: ScamAssessor = DemoAssessor()
 
 
 async def assess_pending() -> None:
-    async def assess(room: Room, snapshot: tuple[Segment, ...]) -> None:
-        async with assessment_slots:
+    capacity_wait_timeout = 5
+
+    async def finish_cleanup(task: asyncio.Task[None]) -> None:
+        # Cleanup must finish even if shutdown cancels the owner again.
+        cancelled = False
+        while True:
+            try:
+                await asyncio.shield(task)
+                break
+            except asyncio.CancelledError:
+                if task.cancelled():
+                    raise
+                cancelled = True
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def assess(room: Room) -> None:
+        reserved = False
+        acquired = False
+
+        async def release() -> None:
+            if acquired:
+                assessment_slots.release()
+            if reserved:
+                async with room.lock:
+                    room.busy = False
+
+        try:
+            async with room.lock:
+                snapshot: tuple[Segment, ...] | None = store.reserve(room)
+                reserved = snapshot is not None
+            if not reserved:
+                return
+            try:
+                async with asyncio.timeout(capacity_wait_timeout):
+                    _ = await assessment_slots.acquire()
+                    acquired = True
+            except TimeoutError:
+                return
+            async with room.lock:
+                if (
+                    room.ended
+                    or not room.segments
+                    or room.cursor == room.segments[-1].id
+                ):
+                    return
+                # Keep busy ownership, but evaluate lines received while queued.
+                snapshot = tuple(room.segments)
             try:
                 assessor = demo_assessor if room.mode == "demo" else live_assessor
                 if assessor is None:
                     raise ValueError("Provider unavailable")
-                decision = await asyncio.wait_for(assessor.assess(snapshot), timeout=15)
+                async with asyncio.timeout(15):
+                    decision = await assessor.assess(snapshot)
             except Exception:  # noqa: BLE001
                 async with room.lock:
                     if not room.ended:
@@ -120,6 +168,8 @@ async def assess_pending() -> None:
                         )
             else:
                 async with room.lock:
+                    if room.ended:
+                        return
                     store.commit(room, snapshot, decision)
                     if room.provider_status["assessment"] != "available":
                         room.provider_status["assessment"] = "available"
@@ -130,19 +180,25 @@ async def assess_pending() -> None:
                                 "status": "available",
                             }
                         )
-            finally:
-                async with room.lock:
-                    room.busy = False
+        finally:
+            if reserved or acquired:
+                await finish_cleanup(asyncio.create_task(release()))
 
     await store.cleanup()
-    jobs: list[asyncio.Task[None]] = []
-    for room in list(store.rooms.values()):
-        async with room.lock:
-            snapshot = store.reserve(room)
-        if snapshot:
-            jobs.append(asyncio.create_task(assess(room, snapshot)))
+    jobs = [asyncio.create_task(assess(room)) for room in list(store.rooms.values())]
     if jobs:
-        _ = await asyncio.gather(*jobs)
+        try:
+            _ = await asyncio.gather(*jobs)
+        except BaseException:
+            for job in jobs:
+                if not job.done():
+                    _ = job.cancel()
+
+            async def drain() -> None:
+                _ = await asyncio.gather(*jobs, return_exceptions=True)
+
+            await finish_cleanup(asyncio.create_task(drain()))
+            raise
 
 
 @asynccontextmanager
@@ -269,7 +325,7 @@ async def scan_email(
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.4.0"}
 
 
 @app.post("/api/sessions", status_code=201)
@@ -337,6 +393,8 @@ async def audio(
     room_id: str,
     clientSeq: Annotated[int, Form(gt=0)],
     audio: Annotated[UploadFile, File()],
+    captureStartedAt: Annotated[datetime | None, Form()] = None,
+    captureEndedAt: Annotated[datetime | None, Form()] = None,
     authorization: Annotated[str | None, Header()] = None,
 ) -> Response:
     room, role = authorized(room_id, authorization)
@@ -345,6 +403,18 @@ async def audio(
     if audio.content_type != "audio/webm":
         raise SessionError(422, "unsupported_audio", "Unsupported audio")
     started = timestamp()
+    if (captureStartedAt is None) != (captureEndedAt is None):
+        raise SessionError(422, "invalid_input", "Capture timestamps must be paired")
+    if (
+        captureStartedAt is not None
+        and captureEndedAt is not None
+        and (
+            captureStartedAt.utcoffset() is None
+            or captureEndedAt.utcoffset() is None
+            or captureEndedAt < captureStartedAt
+        )
+    ):
+        raise SessionError(422, "invalid_input", "Invalid capture timestamps")
     data = await audio.read(MAX_AUDIO + 1)
     if len(data) > MAX_AUDIO:
         raise SessionError(413, "clip_too_large", "Clip too large")
@@ -400,7 +470,8 @@ async def audio(
                 text,
                 "openai",
                 fingerprint,
-                started,
+                captureStartedAt or started,
+                ended=captureEndedAt,
                 blank=not text,
             )
     finally:

@@ -6,11 +6,13 @@ export type AssessmentView =
   | ({ kind: "unavailable" } & Earlier)
   | { kind: "unassessed" }
   | { kind: "pending"; earlierEvidence: EvidenceLine[] }
-  | ({ kind: "stale" } & Earlier)
   | {
       kind: "ready";
+      freshness: "current" | "updating";
       risk: Assessment["risk"];
       provider: Assessment["provider"];
+      scamType: Assessment["scamType"];
+      scamTypeConfidence: Assessment["scamTypeConfidence"];
       evidence: EvidenceLine[];
     };
 
@@ -24,14 +26,17 @@ export function assessmentView(snapshot: Snapshot | null): AssessmentView {
     return { kind: "unavailable", earlierEvidence: evidence };
   if (!snapshot.segments.length && !latest) return { kind: "unassessed" };
   if (!latest) return { kind: "pending", earlierEvidence: [] };
-  if (latest.throughSegmentId !== snapshot.segments.at(-1)?.id)
-    return { kind: "stale", earlierEvidence: evidence };
-  if (snapshot.currentRisk === null)
-    return { kind: "pending", earlierEvidence: evidence };
   return {
     kind: "ready",
-    risk: snapshot.currentRisk,
+    freshness:
+      latest.throughSegmentId !== snapshot.segments.at(-1)?.id ||
+      snapshot.currentRisk === null
+        ? "updating"
+        : "current",
+    risk: latest.risk,
     provider: latest.provider,
+    scamType: latest.scamType ?? null,
+    scamTypeConfidence: latest.scamTypeConfidence ?? null,
     evidence,
   };
 }
@@ -62,12 +67,11 @@ export function assessmentCopy(
       unavailable: { likelihood: "Unavailable", sentence: "Review unavailable." },
       unassessed: { likelihood: "Unassessed", sentence: "Waiting for a review." },
       pending: { likelihood: "Pending", sentence: "Waiting for a review." },
-      stale: { likelihood: "Earlier review", sentence: "New lines await review." },
     }[view.kind];
   }
   const likelihood = `${Math.round(view.risk * 100)}%`;
   return {
     likelihood,
-    sentence: `${mode === "demo" ? "Sample rule" : "Jev"} estimates a ${likelihood} likelihood of a scam.`,
+    sentence: `${mode === "demo" ? "Sample rule" : "Jev"} suspicion score: ${likelihood}.`,
   };
 }

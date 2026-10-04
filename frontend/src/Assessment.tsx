@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { assessmentCopy, type AssessmentView } from "./assessment-view";
-import type { Membership } from "./protocol";
+import { scamTypeLabels, type Membership } from "./protocol";
 
 function elapsed(milliseconds: number) {
   const seconds = Math.floor(milliseconds / 1000);
@@ -38,7 +38,7 @@ export function Assessment({
         className={`likelihood ${view.kind === "ready" ? "is-ready" : "is-neutral"}`}
         aria-labelledby="risk-title"
       >
-        <h2 id="risk-title">Scam likelihood</h2>
+        <h2 id="risk-title">Scam suspicion</h2>
         <strong className="likelihood-value" aria-live="polite">
           {copy.likelihood}
         </strong>
@@ -56,12 +56,36 @@ export function Assessment({
       </aside>
       <section className="explanation" aria-labelledby="explanation-title">
         <div className="recommendation">
-          <h2 id="explanation-title">Recommendation</h2>
-          <p>{copy.sentence}</p>
+          <h2 id="explanation-title">RECOMMENDATION</h2>
+          <p>
+            {view.kind === "ready" ? (
+              <strong>{copy.likelihood} scam suspicion</strong>
+            ) : copy.sentence}
+          </p>
+          {view.kind === "ready" && view.freshness === "updating" && (
+            <p className="assessment-note" role="status">
+              Updating. Showing the previous assessment.
+            </p>
+          )}
+          {view.kind === "ready" && view.scamType != null && (
+            <div aria-live="polite">
+              <p>
+                <small>Likely scam type</small>{": "}
+                {scamTypeLabels[view.scamType]}
+              </p>
+              <small>
+                Based on the conversation context, not definitive proof of fraud.
+              </small>
+            </div>
+          )}
         </div>
         {evidence.length > 0 && (
           <div className="evidence">
-            <h3>{view.kind === "ready" ? "Evidence" : "Earlier evidence"}</h3>
+            <h3>
+              {view.kind === "ready" && view.freshness === "current"
+                ? "Evidence"
+                : "Earlier evidence"}
+            </h3>
             <ul>
               {evidence.map((line) => (
                 <li key={line.id}>

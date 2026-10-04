@@ -542,7 +542,7 @@ test("provider outage and recovery never revive a cached score or current eviden
   await page.getByRole("button", { name: "Add typed line" }).click();
   await expect(page.locator(".likelihood-value")).toHaveText("20%");
   await expect(
-    page.getByText("Sample rule estimates a 20% likelihood of a scam."),
+    page.getByText("20% scam suspicion", { exact: true }),
   ).toBeVisible();
   await page.getByLabel("Add a typed line").fill("Send the code now");
   await page.getByRole("button", { name: "Add typed line" }).click();
@@ -618,7 +618,7 @@ test("simulated live membership has separate join action and a neutral review", 
   expect(requests).toEqual(['{"mode":"live"}']);
   await expect(page.locator(".likelihood-value")).toHaveText("Unassessed");
   await expect(page.locator(".likelihood-marker")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Start live transcription" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop live transcription" })).toBeVisible();
   await page.screenshot({ path: "/tmp/jev-ui-artifacts/call-live-desktop.png", fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: "End call for everyone" }).click();
 });

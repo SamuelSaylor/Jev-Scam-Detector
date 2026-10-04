@@ -15,6 +15,28 @@ const segment = z
     endMs: z.number().int().nonnegative(),
   })
   .strict();
+export const scamType = z.enum([
+  "credential_theft",
+  "tech_support_refund",
+  "payment_diversion",
+  "task_job",
+  "advance_fee_prize",
+  "investment",
+  "no_apparent_scam",
+  "insufficient_context",
+  "other_mixed",
+]);
+export const scamTypeLabels = {
+  credential_theft: "Credential theft",
+  tech_support_refund: "Tech support / refund scam",
+  payment_diversion: "Payment diversion",
+  task_job: "Task / job scam",
+  advance_fee_prize: "Advance-fee / prize scam",
+  investment: "Investment scam",
+  no_apparent_scam: "No apparent scam",
+  insufficient_context: "Insufficient context",
+  other_mixed: "Other / mixed pattern",
+} satisfies Record<z.infer<typeof scamType>, string>;
 const assessment = z
   .object({
     id: z.string(),
@@ -22,6 +44,25 @@ const assessment = z
     mode,
     provider: z.enum(["demo-rule", "jev"]),
     risk: z.number().finite().min(0).max(1),
+    confidence: z.number().finite().min(0).max(1).nullable(),
+    suspicionLevel: z.enum(["low", "moderate", "high"]),
+    indicators: z.array(
+      z.enum([
+        "credentials",
+        "payment",
+        "impersonation",
+        "urgency",
+        "secrecy",
+        "remote_access",
+        "upfront_fee",
+        "reward",
+        "story_change",
+        "persistence",
+      ]),
+    ),
+    summary: z.string().min(1).max(400),
+    scamType: scamType.nullable().optional(),
+    scamTypeConfidence: z.number().finite().min(0).max(1).nullable().optional(),
     evidenceSegmentIds: z.array(z.string()),
     throughSegmentId: z.string(),
     createdAt: z.string().datetime(),
@@ -134,21 +175,15 @@ export function updatedSnapshot(state: Snapshot, incoming: Event): Snapshot {
         segments: state.segments.some((item) => item.id === incoming.segment.id)
           ? state.segments
           : [...state.segments, incoming.segment],
-        currentRisk: null,
       };
     case "assessment":
+      if (state.assessments.some((item) => item.id === incoming.assessment.id)) {
+        return state;
+      }
       return {
         ...state,
-        assessments: state.assessments.some(
-          (item) => item.id === incoming.assessment.id,
-        )
-          ? state.assessments
-          : [...state.assessments, incoming.assessment],
-        currentRisk:
-          state.providerStatus.assessment === "available" &&
-          state.segments.at(-1)?.id === incoming.assessment.throughSegmentId
-            ? incoming.assessment.risk
-            : null,
+        assessments: [...state.assessments, incoming.assessment].slice(-32),
+        currentRisk: incoming.assessment.risk,
       };
     case "provider_status":
       return {
@@ -157,11 +192,6 @@ export function updatedSnapshot(state: Snapshot, incoming: Event): Snapshot {
           ...state.providerStatus,
           [incoming.provider]: incoming.status,
         },
-        currentRisk:
-          incoming.provider === "assessment" &&
-          incoming.status === "unavailable"
-            ? null
-            : state.currentRisk,
       };
     case "signal":
     case "signal_error":

@@ -304,12 +304,19 @@ export class Room {
     });
   }
 
-  upload(blob: Blob): Promise<void> {
+  upload(
+    blob: Blob,
+    timing?: { captureStartedAt: string; captureEndedAt: string },
+  ): Promise<void> {
     return this.enqueue(async () => {
       if (this.stopped) return;
       const body = new FormData();
       body.append("clientSeq", String(this.nextSequence()));
       body.append("audio", blob, "clip.webm");
+      if (timing) {
+        body.append("captureStartedAt", timing.captureStartedAt);
+        body.append("captureEndedAt", timing.captureEndedAt);
+      }
       const controller = new AbortController();
       this.uploadAbort = controller;
       try {

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from jev_scam_detector.domain import AssessmentDecision, Mode, Role, Segment
+from jev_scam_detector.scam_criteria import suspicion_level, suspicion_summary
 
 type Event = dict[str, object]
 
@@ -75,14 +76,7 @@ class Room:
         other: Role = "guest" if role == "host" else "host"
         peer = self.seats.get(other)
         latest = self.assessments[-1] if self.assessments else None
-        risk = (
-            latest["risk"]
-            if latest
-            and self.segments
-            and latest["throughSegmentId"] == self.segments[-1].id
-            and self.provider_status["assessment"] == "available"
-            else None
-        )
+        risk = latest["risk"] if latest else None
         return {
             "sessionId": self.id,
             "role": role,
@@ -181,6 +175,7 @@ class SessionStore:
         fingerprint: str,
         started: datetime,
         *,
+        ended: datetime | None = None,
         blank: bool = False,
     ) -> tuple[Segment | None, bool]:
         duplicate, previous = self.receipt(room, role, seq, fingerprint)
@@ -201,7 +196,7 @@ class SessionStore:
                 source,
                 iso(now),
                 room.elapsed(started) if source == "openai" else room.elapsed(now),
-                room.elapsed(now),
+                room.elapsed(ended or now),
             )
         )
         seat.max_seq = seq
@@ -220,7 +215,7 @@ class SessionStore:
         ):
             return None
         room.busy = True
-        return tuple(room.segments[-20:])
+        return tuple(room.segments)
 
     def commit(
         self, room: Room, snapshot: tuple[Segment, ...], decision: AssessmentDecision
@@ -229,8 +224,21 @@ class SessionStore:
             not math.isfinite(decision.risk)
             or not 0 <= decision.risk <= 1
             or not set(decision.evidence_segment_ids) <= {s.id for s in snapshot}
+            or (
+                decision.confidence is not None
+                and (
+                    not math.isfinite(decision.confidence)
+                    or not 0 <= decision.confidence <= 1
+                )
+            )
         ):
             raise ValueError("Invalid provider decision")
+        classification = decision.classification
+        if classification is not None and (
+            not math.isfinite(classification.confidence)
+            or not 0 <= classification.confidence <= 1
+        ):
+            raise ValueError("Invalid provider classification")
         if room.ended:
             return
         now = timestamp()
@@ -240,6 +248,12 @@ class SessionStore:
             "mode": room.mode,
             "provider": "demo-rule" if room.mode == "demo" else "jev",
             "risk": decision.risk,
+            "confidence": decision.confidence,
+            "suspicionLevel": suspicion_level(decision.risk),
+            "indicators": list(decision.indicators),
+            "summary": suspicion_summary(decision.risk, decision.indicators),
+            "scamType": classification.scam_type.value if classification else None,
+            "scamTypeConfidence": classification.confidence if classification else None,
             "evidenceSegmentIds": list(decision.evidence_segment_ids),
             "throughSegmentId": snapshot[-1].id,
             "createdAt": iso(now),

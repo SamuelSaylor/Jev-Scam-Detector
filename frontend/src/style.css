@@ -1055,6 +1055,28 @@ h2 {
   transform: rotate(-1deg);
 }
 
+.risk .judgment-confidence {
+  font-weight: 700;
+}
+
+.risk .suspicion-summary {
+  font-size: 0.95rem;
+}
+
+.risk .assessment-note,
+.recommendation .assessment-note {
+  display: block;
+  margin: 8px 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.risk .assessment-note.warning {
+  border: 0;
+  padding: 4px 6px;
+  transform: none;
+}
+
 .evidence {
   border-top: 3px solid #000;
   margin-top: 18px;
@@ -1242,7 +1264,7 @@ footer span {
 .call-grid {
   display: grid;
   grid-template-columns: minmax(235px, 0.8fr) minmax(0, 1.65fr) 96px;
-  grid-template-rows: minmax(0, 1fr) 190px;
+  grid-template-rows: minmax(0, 1fr) 270px;
   gap: 16px;
 }
 .call-header {
@@ -1485,7 +1507,8 @@ footer span {
   grid-column: 1 / 3;
   grid-row: 2;
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
   background: var(--paper);
   color: var(--ink);
   border: 5px solid #000;
@@ -1654,7 +1677,7 @@ footer span {
     order: 2;
   }
   .explanation {
-    max-height: 340px;
+    height: 420px;
   }
 }
 @media (max-width: 520px) {
@@ -1692,19 +1715,38 @@ footer span {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
-  align-content: start;
+  align-content: stretch;
+}
+.explanation .recommendation {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
 }
 .explanation .recommendation h2 {
-  font-size: 20px;
+  font-size: 24px;
   margin: 0;
 }
 .explanation .recommendation p {
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1.5;
 }
+.explanation .recommendation > p strong {
+  font-size: 24px;
+}
+.explanation .recommendation small {
+  font-size: 15px;
+}
 .explanation .evidence {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--red) var(--paper);
   margin: 0;
-  padding: 0 0 0 18px;
+  padding: 0 8px 0 18px;
   border: 0;
   border-left: 2px solid var(--ink);
 }
@@ -1741,6 +1783,7 @@ footer span {
   }
   .explanation {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
   }
   .explanation .evidence {
