@@ -1,0 +1,57 @@
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.repository.id == github.event.repository.id &&
+      github.event.workflow_run.head_repository.id == github.event.repository.id &&
+      github.event.workflow_run.name == 'CI' &&
+      github.event.workflow_run.path == '.github/workflows/ci.yml'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: render-production
+      cancel-in-progress: false
+    timeout-minutes: 60
+    steps:
+      - name: Install Render CLI v2.28.0
+        run: |
+          curl -fsSL --retry 3 https://github.com/render-oss/cli/releases/download/v2.28.0/cli_2.28.0_linux_amd64.zip -o "$RUNNER_TEMP/render-cli.zip"
+          echo '00d1ca6f3c31b1f4bc7316837b8ee24acbeb11cf372b7593c7d2c3106a1987b4  '"$RUNNER_TEMP/render-cli.zip" | sha256sum -c -
+          unzip -j "$RUNNER_TEMP/render-cli.zip" cli_v2.28.0 -d "$RUNNER_TEMP"
+          chmod +x "$RUNNER_TEMP/cli_v2.28.0"
+          "$RUNNER_TEMP/cli_v2.28.0" deploys create --help >/dev/null
+      - name: Deploy checked main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          CHECKED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RENDER_API_KEY" || -z "$RENDER_SERVICE_ID" ]]; then
+            echo 'Production Render credentials are missing' >&2
+            exit 1
+          fi
+          current_sha=$(curl -fsSL --retry 3 \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | jq -er '.object.sha')
+          if [[ "$CHECKED_SHA" != "$current_sha" ]]; then
+            echo "Skipped stale CI run for $CHECKED_SHA. Current main is $current_sha."
+            exit 0
+          fi
+          "$RUNNER_TEMP/cli_v2.28.0" deploys create "$RENDER_SERVICE_ID" \
+            --commit "$CHECKED_SHA" --wait --output json --confirm
