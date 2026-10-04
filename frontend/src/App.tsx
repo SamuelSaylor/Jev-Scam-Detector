@@ -17,7 +17,6 @@ type Microphone = "off" | "requesting" | "on" | "muted" | "denied";
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "lobby" });
   const [sessionInput, setSessionInput] = useState("");
-  const [mode, setMode] = useState<"demo" | "live">("demo");
   const [text, setText] = useState("");
   const [message, setMessage] = useState("");
   const [connection, setConnection] = useState<
@@ -39,12 +38,11 @@ export default function App() {
     [],
   );
 
-  async function join(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function join(sessionId?: string) {
     setMessage("");
     setScreen({ kind: "joining" });
     try {
-      const member = await enter(mode, sessionInput.trim() || undefined);
+      const member = await enter("live", sessionId);
       const instance = new Room(member, {
         onSnapshot: (snapshot) =>
           setScreen((current) =>
@@ -187,17 +185,11 @@ export default function App() {
             <span aria-hidden="true">Jev Scam Detector</span>
           </span>
         </span>
-        <span className="top-note">SECOND OPINION</span>
         <span className="top-slash" aria-hidden="true" />
       </header>
       {active ? (
         <main className="call-layout">
           <section className="call-header" aria-label="Call details">
-            <p className="context stamp">
-              {active.member.mode === "demo" ? "Demo mode" : "Live mode"} · 2
-              seats
-            </p>
-            <h1>On the call</h1>
             <div className="room-ticket">
               <strong aria-label="Room ID">{active.member.sessionId}</strong>
               <button
@@ -227,15 +219,23 @@ export default function App() {
                   </span>
                   <div>
                     <strong>You</strong>
-                    <span>
-                      {active.member.role === "host" ? "Host" : "Guest"} ·{" "}
-                      {microphone === "on"
-                        ? "Microphone on"
-                        : microphone === "muted"
-                          ? "Muted"
-                          : microphone === "denied"
-                            ? "Microphone unavailable"
-                            : "Microphone off"}
+                    <span
+                      className="mic-state"
+                      role="img"
+                      aria-label={`Microphone ${microphone}`}
+                      title={`Microphone ${microphone}`}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        {microphone === "requesting" ? (
+                          <circle cx="12" cy="12" r="8" strokeDasharray="3 3" />
+                        ) : (
+                          <>
+                            <rect x="9" y="2" width="6" height="12" rx="3" />
+                            <path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8" />
+                            {microphone !== "on" && <path d="M3 3l18 18" />}
+                          </>
+                        )}
+                      </svg>
                     </span>
                   </div>
                 </div>
@@ -262,10 +262,6 @@ export default function App() {
                 {connection === "connected"
                   ? "Audio peer connected"
                   : `Audio peer ${connection}`}{" "}
-                ·{" "}
-                {snapshot?.peer.connected
-                  ? "Both browsers in room"
-                  : "Waiting for the other browser"}{" "}
                 <button
                   className="reconnect"
                   type="button"
@@ -328,11 +324,6 @@ export default function App() {
                   End call for everyone
                 </button>
               </div>
-              <p className="privacy">
-                {active.member.mode === "demo"
-                  ? "Demo audio goes only to the other caller. It isn't uploaded or transcribed. Only typed text is reviewed."
-                  : "Live mode. Audio is uploaded in complete five-second clips only when you start live transcription."}
-              </p>
               {active.member.mode === "live" &&
                 snapshot?.providerStatus.transcription === "unavailable" && (
                   <p className="privacy" role="status">
@@ -382,82 +373,45 @@ export default function App() {
         <main className="welcome">
           <div className="burst" aria-hidden="true" />
           <div className="intro">
-            <p className="context stamp">CALL CHECK</p>
             <div className="title-stack">
-              <span className="ghost-copy" aria-hidden="true">
-                CHECK
-              </span>
               <h1>
                 <span className="title-line">CATCHING SCAMMERS</span>
                 <span className="title-line accent live">LIVE!</span>
               </h1>
             </div>
-            <p className="lede">
-              Make a private room for two people. Talk and review shared text.
-            </p>
-            <p className="demo-note">
-              Demo uses a sample rule on typed text. Live requires server
-              providers.
-            </p>
           </div>
-          <form className="entry" onSubmit={(event) => void join(event)}>
-            <h2>Start or join</h2>
-            <fieldset>
-              <legend>Review mode</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="demo"
-                  checked={mode === "demo"}
-                  onChange={() => setMode("demo")}
-                />{" "}
-                Demo, no keys needed
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="live"
-                  checked={mode === "live"}
-                  onChange={() => setMode("live")}
-                />{" "}
-                Live, requires server providers
-              </label>
-            </fieldset>
+          <form
+            className="entry"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (sessionInput.trim()) void join(sessionInput.trim());
+            }}
+          >
+            <button
+              className="primary"
+              type="button"
+              disabled={screen.kind !== "lobby"}
+              onClick={() => void join()}
+            >
+              Create room
+            </button>
             <label htmlFor="room-input">Room ID, if joining</label>
             <input
               id="room-input"
               value={sessionInput}
               onChange={(event) => setSessionInput(event.target.value)}
-              placeholder="Leave blank to make a room"
               autoComplete="off"
             />
             <button
-              className="primary"
-              disabled={screen.kind === "joining" || screen.kind === "ending"}
               type="submit"
+              disabled={screen.kind !== "lobby" || !sessionInput.trim()}
             >
-              {screen.kind === "joining"
-                ? "Connecting…"
-                : sessionInput.trim()
-                  ? "Join room"
-                  : "Create room"}
+              Join room
             </button>
-            <small>
-              One host and one guest. The room ID is not a login token.
-            </small>
-            {message && (
-              <p role="alert" className="notice">
-                {message}
-              </p>
-            )}
+            {message && <p role="alert" className="notice">{message}</p>}
           </form>
         </main>
       )}
-      <footer>
-        Jev call demo <span>0.3.0</span>
-      </footer>
     </div>
   );
 }

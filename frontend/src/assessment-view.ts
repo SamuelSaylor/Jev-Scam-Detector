@@ -56,17 +56,18 @@ function selectEvidence(segments: Segment[], ids: string[]): EvidenceLine[] {
 export function assessmentCopy(
   mode: Snapshot["mode"],
   view: AssessmentView,
-): string {
+): { likelihood: string; sentence: string } {
   if (view.kind !== "ready") {
     return {
-      unavailable: "Assessment unavailable. No score can establish safety.",
-      unassessed: "No lines reviewed yet.",
-      pending: "Waiting for the next review. No result does not mean safe.",
-      stale:
-        "New lines await review. Earlier evidence is not a current assessment.",
+      unavailable: { likelihood: "Unavailable", sentence: "Review unavailable." },
+      unassessed: { likelihood: "Unassessed", sentence: "Waiting for a review." },
+      pending: { likelihood: "Pending", sentence: "Waiting for a review." },
+      stale: { likelihood: "Earlier review", sentence: "New lines await review." },
     }[view.kind];
   }
-  return mode === "demo"
-    ? "Sample rule reviewed the shared text. Low likelihood does not establish safety."
-    : "Jev estimated likelihood from transcript text. Low likelihood does not establish safety.";
+  const likelihood = `${Math.round(view.risk * 100)}%`;
+  return {
+    likelihood,
+    sentence: `${mode === "demo" ? "Sample rule" : "Jev"} estimates a ${likelihood} likelihood of a scam.`,
+  };
 }

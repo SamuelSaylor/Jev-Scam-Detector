@@ -69,12 +69,18 @@ describe("call assessment view", () => {
       kind: "ready",
       risk: 1,
     });
-    expect(assessmentCopy("demo", assessmentView(ready))).toContain(
-      "Sample rule",
-    );
-    expect(assessmentCopy("live", assessmentView(ready))).toContain(
-      "Jev estimated",
-    );
+    expect(assessmentCopy("demo", assessmentView(ready))).toEqual({
+      likelihood: "0%",
+      sentence: "Sample rule estimates a 0% likelihood of a scam.",
+    });
+    expect(assessmentCopy("live", assessmentView({ ...ready, currentRisk: 0.755 }))).toEqual({
+      likelihood: "76%",
+      sentence: "Jev estimates a 76% likelihood of a scam.",
+    });
+    expect(assessmentCopy("live", assessmentView({ ...ready, currentRisk: 1 }))).toEqual({
+      likelihood: "100%",
+      sentence: "Jev estimates a 100% likelihood of a scam.",
+    });
   });
   it("keeps earlier evidence neutral after new lines, outage and provider recovery", () => {
     const covered = {
@@ -83,6 +89,9 @@ describe("call assessment view", () => {
       assessments: [review],
       currentRisk: null,
     };
+    expect(assessmentCopy("live", assessmentView(covered))).toEqual({
+      likelihood: "Pending", sentence: "Waiting for a review.",
+    });
     expect(assessmentView(covered)).toMatchObject({
       kind: "pending",
       earlierEvidence: [{ id: "one" }],
@@ -96,11 +105,11 @@ describe("call assessment view", () => {
         },
       }),
     ).toMatchObject({ kind: "unavailable", earlierEvidence: [{ id: "one" }] });
-    expect(
-      assessmentView({
-        ...covered,
-        segments: [line, { ...line, id: "two", clientSeq: 2 }],
-      }),
-    ).toMatchObject({ kind: "stale", earlierEvidence: [{ id: "one" }] });
+    expect(assessmentCopy("live", assessmentView({
+      ...covered, segments: [line, { ...line, id: "two", clientSeq: 2 }],
+    }))).toEqual({ likelihood: "Earlier review", sentence: "New lines await review." });
+    expect(assessmentCopy("live", assessmentView({
+      ...covered, providerStatus: { ...covered.providerStatus, assessment: "unavailable" },
+    }))).toEqual({ likelihood: "Unavailable", sentence: "Review unavailable." });
   });
 });

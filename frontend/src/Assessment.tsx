@@ -24,17 +24,13 @@ export function Assessment({
       : "earlierEvidence" in view
         ? view.earlierEvidence
         : [];
-  const status =
-    view.kind === "ready"
-      ? `${Math.round(view.risk * 100)}%`
-      : {
-          unavailable: "Unavailable",
-          unassessed: "Unassessed",
-          pending: "Pending",
-          stale: "Earlier review",
-        }[view.kind];
-  const markerStyle: CSSProperties & { "--risk-position": string } = {
+  const copy = assessmentCopy(mode, view);
+  const markerStyle: CSSProperties & {
+    "--risk-position": string;
+    "--risk-color": string;
+  } = {
     "--risk-position": `${view.kind === "ready" ? view.risk * 100 : 0}%`,
+    "--risk-color": `hsl(${view.kind === "ready" ? 120 * (1 - view.risk) : 0} 90% 45%)`,
   };
   return (
     <>
@@ -44,7 +40,7 @@ export function Assessment({
       >
         <h2 id="risk-title">Scam likelihood</h2>
         <strong className="likelihood-value" aria-live="polite">
-          {status}
+          {copy.likelihood}
         </strong>
         <span className="likelihood-high" aria-hidden="true">
           High
@@ -59,37 +55,25 @@ export function Assessment({
         </span>
       </aside>
       <section className="explanation" aria-labelledby="explanation-title">
-        <div className="section-heading">
-          <h2 id="explanation-title">What the text suggests</h2>
+        <div className="recommendation">
+          <h2 id="explanation-title">Recommendation</h2>
+          <p>{copy.sentence}</p>
         </div>
-        <p>{assessmentCopy(mode, view)}</p>
         {evidence.length > 0 && (
           <div className="evidence">
-            <h3>
-              {view.kind === "ready"
-                ? "Evidence in this review"
-                : "Evidence from an earlier review"}
-            </h3>
+            <h3>{view.kind === "ready" ? "Evidence" : "Earlier evidence"}</h3>
             <ul>
               {evidence.map((line) => (
                 <li key={line.id}>
                   <button type="button" onClick={() => jumpTo(line.id)}>
-                    {line.speaker === role ? "Your" : "Other participant's"}{" "}
-                    line at {elapsed(line.startMs)}: “{line.text}”
+                    <span className="evidence-meta">{line.speaker === role ? "You" : "Other participant"} · {elapsed(line.startMs)}</span>
+                    <span>“{line.text}”</span>
                   </button>
                 </li>
               ))}
             </ul>
           </div>
         )}
-        {view.kind === "ready" && evidence.length === 0 && (
-          <p>No lines cited in this review. This does not establish safety.</p>
-        )}
-        <p className="guidance">
-          <strong>If anything feels wrong</strong> Pause the call. Find the
-          organization's number yourself from a trusted source. Do not share
-          codes or send money based on this call.
-        </p>
       </section>
     </>
   );

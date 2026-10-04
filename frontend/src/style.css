@@ -1659,3 +1659,81 @@ footer span {
     max-width: 91%;
   }
 }
+
+.entry {
+  gap: 18px;
+}
+.entry > button {
+  min-height: 48px;
+}
+.mic-state {
+  display: inline-block;
+  line-height: 1;
+  margin-top: 4px;
+}
+.mic-state svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+.explanation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-content: start;
+}
+.explanation .recommendation h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.explanation .recommendation p {
+  font-size: 15px;
+  line-height: 1.5;
+}
+.explanation .evidence {
+  margin: 0;
+  padding: 0 0 0 18px;
+  border: 0;
+  border-left: 2px solid var(--ink);
+}
+.explanation .evidence ul {
+  list-style: none;
+  padding: 0;
+}
+.explanation .evidence li + li {
+  margin-top: 8px;
+}
+.explanation .evidence button span {
+  display: block;
+}
+.explanation .evidence .evidence-meta {
+  color: var(--ink);
+  font: 12px var(--font-stamp);
+  margin-bottom: 3px;
+}
+.explanation .evidence button:focus-visible {
+  outline: 3px solid var(--red);
+  outline-offset: 3px;
+}
+.is-ready .likelihood-track {
+  background: linear-gradient(to top, #81ba91, #e3cd75 50%, #d47b72);
+}
+.likelihood-marker {
+  background: var(--risk-color);
+  border: 1px solid #000;
+  box-shadow: 0 0 0 2px #000;
+}
+@media (max-width: 850px) {
+  .is-ready .likelihood-track {
+    background: linear-gradient(to right, #81ba91, #e3cd75 50%, #d47b72);
+  }
+  .explanation {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .explanation .evidence {
+    border-left: 0;
+    border-top: 2px solid var(--ink);
+    padding: 8px 0 0;
+  }
+}

@@ -31,6 +31,20 @@ async function participant(context: BrowserContext) {
   return page;
 }
 
+async function createDemo(page: Page) {
+  const response = await page.request.post("/api/sessions", {
+    data: { mode: "demo" },
+  });
+  expect(response.ok()).toBe(true);
+  const member: unknown = await response.json();
+  await page.route("**/api/sessions", (route) => route.fulfill({ json: member }), {
+    times: 1,
+  });
+  await page.getByRole("button", { name: "Create room" }).click();
+  await expect(page.getByLabel("Room ID", { exact: true })).toBeVisible();
+  return (await page.getByLabel("Room ID", { exact: true }).textContent()) ?? "";
+}
+
 async function inboundAudio(page: Page) {
   await expect
     .poll(() =>
@@ -123,7 +137,7 @@ test("late microphone permission cannot enable a later call", async ({
   try {
     const page = await context.newPage();
     await page.goto("/");
-    await page.getByRole("button", { name: "Create room" }).click();
+    await createDemo(page);
     await page.getByRole("button", { name: "Connect microphone" }).click();
     await expect(
       page.getByRole("button", { name: "Requesting microphone" }),
@@ -132,7 +146,7 @@ test("late microphone permission cannot enable a later call", async ({
     await expect(
       page.getByRole("button", { name: "Create room" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Create room" }).click();
+    await createDemo(page);
     await page.evaluate(() => window.__releaseMic?.());
     await expect
       .poll(() => page.evaluate(() => window.__micTrack?.readyState))
@@ -140,9 +154,7 @@ test("late microphone permission cannot enable a later call", async ({
     await expect(
       page.getByRole("button", { name: "Connect microphone" }),
     ).toBeVisible();
-    await expect(page.locator(".people .person").first()).toContainText(
-      "Microphone off",
-    );
+    await expect(page.getByRole("img", { name: "Microphone off" })).toBeVisible();
   } finally {
     await context.close();
   }
@@ -158,10 +170,7 @@ test("two browsers connect audio, review typed lines, then end the shared room",
   try {
     const host = await participant(hostContext);
     const guest = await participant(guestContext);
-    await host.getByRole("button", { name: "Create room" }).click();
-    const sessionId = await host
-      .getByLabel("Room ID", { exact: true })
-      .textContent();
+    const sessionId = await createDemo(host);
     expect(sessionId).toBeTruthy();
     await guest.getByLabel("Room ID, if joining").fill(sessionId ?? "");
     await guest.getByRole("button", { name: "Join room" }).click();
@@ -171,6 +180,7 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     await expect(guest.getByRole("status")).toContainText(
       "Audio peer connected",
     );
+    await expect(guest.getByRole("button", { name: "Start live transcription" })).toHaveCount(0);
     await guest.getByRole("button", { name: "Reconnect to room" }).click();
     await expect(host.getByRole("status")).toContainText(
       "Audio peer connected",
@@ -270,13 +280,8 @@ test("two browsers connect audio, review typed lines, then end the shared room",
     });
     try {
       const phonePage = await participant(phone);
-      await phonePage.getByRole("button", { name: "Create room" }).click();
-      await expect(phonePage.locator(".call-header .context")).toContainText(
-        "Demo mode",
-      );
-      await expect(
-        phonePage.getByRole("heading", { name: "What the text suggests" }),
-      ).toBeVisible();
+      await createDemo(phonePage);
+      await expect(phonePage.getByRole("heading", { name: "Recommendation" })).toBeVisible();
       const mobileBounds = await phonePage.evaluate(() => ({
         width: document.documentElement.scrollWidth,
         viewport: innerWidth,
@@ -332,7 +337,7 @@ test("full room and missing room show recoverable errors", async ({
     await expect(visitor.getByRole("alert")).toContainText(
       /not found|expired/i,
     );
-    await host.getByRole("button", { name: "Create room" }).click();
+    await createDemo(host);
     const id = await host.getByLabel("Room ID", { exact: true }).textContent();
     await guest.getByLabel("Room ID, if joining").fill(id ?? "");
     await guest.getByRole("button", { name: "Join room" }).click();
@@ -364,13 +369,10 @@ test("transcript follows, preserves reading position, and keeps evidence jumps i
       fullPage: true,
       animations: "disabled",
     });
-    await host.getByRole("button", { name: "Create room" }).click();
-    const id = await host.getByLabel("Room ID", { exact: true }).textContent();
+    const id = await createDemo(host);
     await guest.getByLabel("Room ID, if joining").fill(id ?? "");
     await guest.getByRole("button", { name: "Join room" }).click();
-    await expect(guest.getByRole("status")).toContainText(
-      "Both browsers in room",
-    );
+    await expect(guest.locator(".people .person").last()).toContainText("In room");
     const send = async (page: Page, text: string) => {
       await page.getByLabel("Add a typed line").fill(text);
       await page.getByRole("button", { name: "Add typed line" }).click();
@@ -534,15 +536,13 @@ test("provider outage and recovery never revive a cached score or current eviden
     server.onMessage((message) => socket.send(message));
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Create room" }).click();
+  await createDemo(page);
   await expect(page.locator(".likelihood-value")).toHaveText("Unassessed");
   await page.getByLabel("Add a typed line").fill("Hello, how are you?");
   await page.getByRole("button", { name: "Add typed line" }).click();
   await expect(page.locator(".likelihood-value")).toHaveText("20%");
   await expect(
-    page.getByText(
-      "No lines cited in this review. This does not establish safety.",
-    ),
+    page.getByText("Sample rule estimates a 20% likelihood of a scam."),
   ).toBeVisible();
   await page.getByLabel("Add a typed line").fill("Send the code now");
   await page.getByRole("button", { name: "Add typed line" }).click();
@@ -564,7 +564,7 @@ test("provider outage and recovery never revive a cached score or current eviden
     page.getByText("Referenced evidence", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Evidence from an earlier review" }),
+    page.getByRole("heading", { name: "Earlier evidence" }),
   ).toBeVisible();
   events.send(
     JSON.stringify({
@@ -583,5 +583,42 @@ test("provider outage and recovery never revive a cached score or current eviden
   await expect(
     page.getByText("Referenced evidence", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "End call for everyone" }).click();
+});
+
+test("simulated live membership has separate join action and a neutral review", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/api\/sessions$/.test(request.url()))
+      requests.push(request.postData() ?? "");
+  });
+  await page.route("**/api/sessions", (route) => route.fulfill({ json: {
+    sessionId: "simulated-live-room",
+    participantToken: "simulated-host-token",
+    role: "host",
+    mode: "live",
+  } }));
+  await page.route("**/api/sessions/simulated-live-room/leave", (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  await page.routeWebSocket("**/api/sessions/simulated-live-room/events", (socket) => {
+    socket.onMessage(() => {});
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /CATCHING SCAMMERS LIVE!/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Join room" })).toBeDisabled();
+  await page.screenshot({ path: "/tmp/jev-ui-artifacts/home-desktop.png", fullPage: true, animations: "disabled" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "/tmp/jev-ui-artifacts/home-mobile.png", fullPage: true, animations: "disabled" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByLabel("Room ID, if joining").fill("typed-but-create");
+  await page.getByRole("button", { name: "Create room" }).click();
+  await expect(page.getByRole("heading", { name: "Recommendation" })).toBeVisible();
+  expect(requests).toEqual(['{"mode":"live"}']);
+  await expect(page.locator(".likelihood-value")).toHaveText("Unassessed");
+  await expect(page.locator(".likelihood-marker")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Start live transcription" })).toBeVisible();
+  await page.screenshot({ path: "/tmp/jev-ui-artifacts/call-live-desktop.png", fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: "End call for everyone" }).click();
 });
