@@ -1,5 +1,7 @@
 import {
   iceConfig,
+  defense,
+  type TrustedContact,
   decodeEvent,
   updatedSnapshot,
   type Event,
@@ -39,6 +41,8 @@ export class Room {
   private ice: RTCConfiguration = {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   };
+  private muted = false;
+  private safetyPaused = false;
   private pendingCandidates: Extract<Signal, { kind: "candidate" }>[] = [];
 
   constructor(
@@ -86,13 +90,60 @@ export class Room {
     }
     this.microphone?.getTracks().forEach((track) => track.stop());
     this.microphone = stream;
+    this.setMuted(this.muted);
     await this.sender?.replaceTrack(stream.getAudioTracks()[0] ?? null);
   }
 
   setMuted(muted: boolean) {
+    this.muted = muted;
     this.microphone?.getAudioTracks().forEach((track) => {
-      track.enabled = !muted;
+      track.enabled = !muted && !this.safetyPaused;
     });
+  }
+
+  setSafetyPaused(paused: boolean) {
+    this.safetyPaused = paused;
+    this.setMuted(this.muted);
+  }
+
+  async updateContact(contact: TrustedContact | null) {
+    const previous = this.state?.defense;
+    const response = await request(
+      `/sessions/${encodeURIComponent(this.member.sessionId)}/defense/contact`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact }),
+      },
+      this.member.participantToken,
+    );
+    const next = defense.parse(await response.json());
+    if (this.state && !this.stopped && this.state.defense === previous) {
+      this.state = { ...this.state, defense: next };
+      this.setSafetyPaused(next.lockout !== null);
+      this.callbacks.onSnapshot(this.state);
+    }
+    return this.state?.defense ?? next;
+  }
+
+  async acknowledge(lockoutId: string) {
+    const previous = this.state?.defense;
+    const response = await request(
+      `/sessions/${encodeURIComponent(this.member.sessionId)}/defense/overrides`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lockoutId }),
+      },
+      this.member.participantToken,
+    );
+    const next = defense.parse(await response.json());
+    if (this.state && !this.stopped && this.state.defense === previous) {
+      this.state = { ...this.state, defense: next };
+      this.setSafetyPaused(next.lockout !== null);
+      this.callbacks.onSnapshot(this.state);
+    }
+    return this.state?.defense ?? next;
   }
 
   private send(data: Signal) {
@@ -176,7 +227,10 @@ export class Room {
       this.resetPeer();
     if (this.state) this.state = updatedSnapshot(this.state, message);
     else if (message.type === "snapshot") this.state = message.snapshot;
-    if (this.state) this.callbacks.onSnapshot(this.state);
+    if (this.state) {
+      this.setSafetyPaused(Boolean(this.state.defense?.lockout));
+      this.callbacks.onSnapshot(this.state);
+    }
     if (message.type === "signal_error") {
       this.callbacks.onMessage(
         "The other participant is offline. Waiting for them to reconnect.",
@@ -316,6 +370,8 @@ export class Room {
   submitText(text: string): Promise<void> {
     return this.enqueue(async () => {
       if (this.stopped) return;
+      if (this.safetyPaused)
+        throw new Error("Review the safety warning before sending this line.");
       await request(
         `/sessions/${encodeURIComponent(this.member.sessionId)}/transcripts`,
         {
@@ -330,7 +386,7 @@ export class Room {
 
   upload(blob: Blob): Promise<void> {
     return this.enqueue(async () => {
-      if (this.stopped) return;
+      if (this.stopped || this.safetyPaused) return;
       const body = new FormData();
       body.append("clientSeq", String(this.nextSequence()));
       body.append("audio", blob, "clip.webm");

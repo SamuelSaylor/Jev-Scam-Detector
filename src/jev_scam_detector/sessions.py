@@ -8,6 +8,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
+from jev_scam_detector.defense import (
+    REASONS,
+    OverrideRecord,
+    RiskAccumulator,
+    SeatDefense,
+    TrustedContact,
+)
 from jev_scam_detector.domain import AssessmentDecision, Mode, Role, Segment
 
 type Event = dict[str, object]
@@ -28,6 +35,7 @@ class Seat:
     pending: set[int] = field(default_factory=set)
     receipts: dict[int, tuple[str, Segment | None]] = field(default_factory=dict)
     queue: asyncio.Queue[Event] | None = None
+    defense: SeatDefense = field(default_factory=SeatDefense)
 
 
 class SessionError(Exception):
@@ -51,6 +59,7 @@ class Room:
     busy: bool = False
     ended: bool = False
     provider_status: dict[str, str] = field(default_factory=dict)
+    accumulator: RiskAccumulator = field(default_factory=RiskAccumulator)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def elapsed(self, instant: datetime) -> int:
@@ -97,6 +106,7 @@ class Room:
             "assessments": list(self.assessments),
             "currentRisk": risk,
             "providerStatus": dict(self.provider_status),
+            "defense": self.seats[role].defense.wire(self.accumulator),
         }
 
 
@@ -152,6 +162,16 @@ class SessionStore:
                 raise SessionError(409, "session_full", "Session full")
             token = secrets.token_urlsafe(32)
             room.seats["guest"] = Seat(token)
+            if room.assessments:
+                latest = (
+                    room.accumulator.history[-1] if room.accumulator.history else None
+                )
+                room.seats["guest"].defense.update(
+                    room.accumulator,
+                    str(room.assessments[-1]["id"]),
+                    latest.confidence if latest else None,
+                    timestamp(),
+                )
             room.touched = timestamp()
             return token
 
@@ -186,6 +206,7 @@ class SessionStore:
         duplicate, previous = self.receipt(room, role, seq, fingerprint)
         if duplicate:
             return previous, True
+        self.require_reviewed(room, role)
         if len(room.segments) >= 256 and not blank:
             raise SessionError(409, "segment_limit", "Segment limit reached")
         seat = room.seats[role]
@@ -229,17 +250,37 @@ class SessionStore:
             not math.isfinite(decision.risk)
             or not 0 <= decision.risk <= 1
             or not set(decision.evidence_segment_ids) <= {s.id for s in snapshot}
+            or (
+                decision.confidence is not None
+                and (
+                    not math.isfinite(decision.confidence)
+                    or not 0 <= decision.confidence <= 1
+                )
+            )
+            or any(
+                i.segment_id not in {s.id for s in snapshot}
+                or i.kind not in REASONS
+                or not math.isfinite(i.probability)
+                or not 0 <= i.probability <= 1
+                for i in decision.indicators
+            )
+            or len({(i.segment_id, i.kind) for i in decision.indicators})
+            != len(decision.indicators)
         ):
             raise ValueError("Invalid provider decision")
-        if room.ended:
+        if room.ended or room.cursor == snapshot[-1].id:
             return
         now = timestamp()
+        risk = room.accumulator.apply(snapshot, decision, room.mode)
         assessment: Event = {
             "id": f"asm_{int(snapshot[-1].id[4:])}",
             "status": "ready",
             "mode": room.mode,
             "provider": "demo-rule" if room.mode == "demo" else "jev",
-            "risk": decision.risk,
+            "risk": risk,
+            "rawRisk": decision.risk,
+            "confidence": decision.confidence,
+            "indicators": [i.wire() for i in decision.indicators],
             "evidenceSegmentIds": list(decision.evidence_segment_ids),
             "throughSegmentId": snapshot[-1].id,
             "createdAt": iso(now),
@@ -250,6 +291,56 @@ class SessionStore:
         room.assessments.append(assessment)
         room.assessments = room.assessments[-32:]
         room.emit({"type": "assessment", "assessment": assessment})
+        for seat in room.seats.values():
+            seat.defense.update(
+                room.accumulator, str(assessment["id"]), decision.confidence, now
+            )
+            room.enqueue(
+                seat,
+                {"type": "defense", "defense": seat.defense.wire(room.accumulator)},
+            )
+
+    @staticmethod
+    def require_reviewed(room: Room, role: Role) -> None:
+        if room.seats[role].defense.hold is not None:
+            raise SessionError(
+                409, "review_required", "Review the safety warning before continuing"
+            )
+
+    def set_contact(
+        self, room: Room, role: Role, contact: TrustedContact | None
+    ) -> Event:
+        seat = room.seats[role]
+        seat.defense.contact = contact
+        view = seat.defense.wire(room.accumulator)
+        room.enqueue(seat, {"type": "defense", "defense": view})
+        return view
+
+    def acknowledge(self, room: Room, role: Role, lockout_id: str) -> Event:
+        seat = room.seats[role]
+        defense = seat.defense
+        if any(item.lockout_id == lockout_id for item in defense.overrides):
+            return defense.wire(room.accumulator)
+        hold = defense.hold
+        if hold is None or hold.id != lockout_id:
+            raise SessionError(409, "review_conflict", "Review has changed")
+        now = timestamp()
+        if now < hold.ready:
+            raise SessionError(409, "review_wait", "Review countdown is not complete")
+        defense.overrides.append(OverrideRecord(hold.id, hold.assessment_id, role, now))
+        defense.overrides = defense.overrides[-64:]
+        defense.acknowledged.update(hold.indicator_pairs)
+        defense.hold = None
+        latest = room.accumulator.history[-1] if room.accumulator.history else None
+        defense.update(
+            room.accumulator,
+            str(room.assessments[-1]["id"]) if room.assessments else hold.assessment_id,
+            latest.confidence if latest else None,
+            now,
+        )
+        view = defense.wire(room.accumulator)
+        room.enqueue(seat, {"type": "defense", "defense": view})
+        return view
 
     @staticmethod
     def fingerprint_audio(data: bytes) -> str:

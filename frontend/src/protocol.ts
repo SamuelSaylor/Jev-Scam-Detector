@@ -15,6 +15,39 @@ const segment = z
     endMs: z.number().int().nonnegative(),
   })
   .strict();
+export const defense = z
+  .object({
+    tier: z.enum(["monitor", "caution", "contact", "lockout"]),
+    reasons: z.array(z.string()),
+    trustedContact: z
+      .object({ name: z.string(), email: z.string().email() })
+      .strict()
+      .nullable(),
+    lockout: z
+      .object({
+        id: z.string(),
+        assessmentId: z.string(),
+        risk: z.number().finite().min(0).max(1),
+        confidence: z.number().finite().min(0).max(1),
+        reasons: z.array(z.string()),
+        evidenceSegmentIds: z.array(z.string()),
+        createdAt: z.string().datetime(),
+        readyAt: z.string().datetime(),
+      })
+      .strict()
+      .nullable(),
+    overrides: z.array(
+      z
+        .object({
+          lockoutId: z.string(),
+          assessmentId: z.string(),
+          role,
+          createdAt: z.string().datetime(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 const assessment = z
   .object({
     id: z.string(),
@@ -22,6 +55,26 @@ const assessment = z
     mode,
     provider: z.enum(["demo-rule", "jev"]),
     risk: z.number().finite().min(0).max(1),
+    rawRisk: z.number().finite().min(0).max(1).optional(),
+    confidence: z.number().finite().min(0).max(1).nullable().optional(),
+    indicators: z
+      .array(
+        z
+          .object({
+            segmentId: z.string(),
+            kind: z.enum([
+              "urgency",
+              "payment",
+              "credentials",
+              "unverified_link",
+              "platform_switch",
+              "independent_verification",
+            ]),
+            probability: z.number().finite().min(0).max(1),
+          })
+          .strict(),
+      )
+      .optional(),
     evidenceSegmentIds: z.array(z.string()),
     throughSegmentId: z.string(),
     createdAt: z.string().datetime(),
@@ -42,6 +95,7 @@ export const snapshot = z
     segments: z.array(segment),
     assessments: z.array(assessment),
     currentRisk: z.number().finite().min(0).max(1).nullable(),
+    defense: defense.optional(),
     providerStatus: z
       .object({ transcription: providerState, assessment: providerState })
       .strict(),
@@ -72,6 +126,7 @@ export const signal = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 export const event = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("defense"), defense }).strict(),
   z.object({ type: z.literal("snapshot"), snapshot }).strict(),
   z.object({ type: z.literal("peer"), ...peer.shape }).strict(),
   z.object({ type: z.literal("signal"), from: role, data: signal }).strict(),
@@ -104,6 +159,9 @@ export const iceConfig = z
     ),
   })
   .strict();
+export type Defense = z.infer<typeof defense>;
+export type TrustedContact = NonNullable<Defense["trustedContact"]>;
+export type Lockout = NonNullable<Defense["lockout"]>;
 export type Membership = z.infer<typeof membership>;
 export type Snapshot = z.infer<typeof snapshot>;
 export type Event = z.infer<typeof event>;
@@ -118,6 +176,8 @@ export function updatedSnapshot(state: Snapshot, incoming: Event): Snapshot {
   switch (incoming.type) {
     case "snapshot":
       return incoming.snapshot;
+    case "defense":
+      return { ...state, defense: incoming.defense };
     case "peer":
       if (incoming.role === state.role) return state;
       return {

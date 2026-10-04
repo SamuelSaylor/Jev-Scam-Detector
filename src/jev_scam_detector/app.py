@@ -10,9 +10,10 @@ from fastapi import FastAPI, File, Form, Header, Request, UploadFile, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError
 from starlette.websockets import WebSocketDisconnect
 
+from jev_scam_detector.defense import TrustedContact
 from jev_scam_detector.domain import (
     AudioClip,
     Mode,
@@ -52,6 +53,19 @@ class Empty(Strict):
 class TranscriptInput(Strict):
     clientSeq: int = Field(gt=0, strict=True)
     text: str = Field(min_length=1, max_length=2000)
+
+
+class ContactInput(Strict):
+    name: str = Field(min_length=1, max_length=80)
+    email: EmailStr = Field(max_length=254)
+
+
+class ContactUpdate(Strict):
+    contact: ContactInput | None
+
+
+class OverrideInput(Strict):
+    lockoutId: str = Field(min_length=1, max_length=128)
 
 
 class Auth(Strict):
@@ -103,7 +117,20 @@ async def assess_pending() -> None:
                 assessor = demo_assessor if room.mode == "demo" else live_assessor
                 if assessor is None:
                     raise ValueError("Provider unavailable")
-                decision = await asyncio.wait_for(assessor.assess(snapshot), timeout=15)
+                if isinstance(assessor, JevAssessor):
+                    async with room.lock:
+                        overrides = tuple(
+                            item.wire()
+                            for seat in room.seats.values()
+                            for item in seat.defense.overrides
+                        )[-32:]
+                    decision = await asyncio.wait_for(
+                        assessor.assess_with_context(snapshot, overrides), timeout=15
+                    )
+                else:
+                    decision = await asyncio.wait_for(
+                        assessor.assess(snapshot), timeout=15
+                    )
             except Exception:  # noqa: BLE001
                 async with room.lock:
                     if not room.ended:
@@ -238,7 +265,7 @@ async def scan_email(
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.4.0"}
 
 
 @app.post("/api/sessions", status_code=201)
@@ -333,6 +360,7 @@ async def audio(
                 if previous
                 else Response(status_code=204)
             )
+        store.require_reviewed(room, role)
         if len(room.segments) >= 256:
             raise SessionError(409, "segment_limit", "Segment limit reached")
         room.seats[role].pending.add(clientSeq)
@@ -378,6 +406,34 @@ async def audio(
     if segment is None:
         return Response(status_code=204)
     return JSONResponse(segment.wire(), status_code=200 if duplicate else 201)
+
+
+@app.post("/api/sessions/{room_id}/defense/contact")
+async def contact_update(
+    room_id: str,
+    body: ContactUpdate,
+    authorization: Annotated[str | None, Header()] = None,
+) -> Event:
+    room, role = authorized(room_id, authorization)
+    contact = None
+    if body.contact:
+        name = body.contact.name.strip()
+        if not name:
+            raise SessionError(422, "invalid_input", "Invalid input")
+        contact = TrustedContact(name, str(body.contact.email))
+    async with room.lock:
+        return store.set_contact(room, role, contact)
+
+
+@app.post("/api/sessions/{room_id}/defense/overrides")
+async def override_review(
+    room_id: str,
+    body: OverrideInput,
+    authorization: Annotated[str | None, Header()] = None,
+) -> Event:
+    room, role = authorized(room_id, authorization)
+    async with room.lock:
+        return store.acknowledge(room, role, body.lockoutId)
 
 
 @app.post("/api/sessions/{room_id}/leave", status_code=204)

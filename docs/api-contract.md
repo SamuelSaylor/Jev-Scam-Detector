@@ -1,4 +1,6 @@
-# API contract, version 0.2.0
+# API contract, version 0.4.0
+
+The [tiered defense extension](tiered-defense-contract.md) is normative for accumulated live risk, assessment indicators/confidence, private defense events, trusted-contact setup, five-second holds, and override logging. The base transport below retains its version 0.2 semantics; the extension adds fields and operations rather than changing authentication or signaling.
 
 This reference fixes the independent backend and frontend wire format. JSON fields use camelCase. Request and response bodies have exactly the fields shown; reject unknown input fields with 422. IDs are opaque strings. Timestamps are UTC RFC 3339 strings with `Z`; relative times are nonnegative integer milliseconds since server `createdAt` for the session. The server stamps receipt time and derives `startMs` and `endMs`; manual segments have equal bounds. For audio, the bounds cover server upload receipt through completed transcription, not exact spoken-word timing. Segment order follows server append order. `clientSeq` is a positive integer scoped to the participant and session, shared by text and audio submissions. The browser increments it for each new submission and retains it for retries. The server returns the prior segment for the same speaker and sequence and identical request fingerprint, even after later sequences; conflicting reuse returns 409. The fingerprint for manual input uses the original submitted text, before trimming. Lower unseen sequences return 409. Audio fingerprint is MIME and full file digest; check dedupe before a second provider call. Sequence gaps are allowed. All success and error JSON use `Content-Type: application/json` except 204.
 
@@ -37,7 +39,7 @@ All session URLs use `/api/sessions/{sessionId}` with the literal session ID URL
 
 | Method and URL | Request | Success |
 | --- | --- | --- |
-| `GET /api/health` | No body or token. | 200 `{"status":"ok","version":"0.2.0"}`. |
+| `GET /api/health` | No body or token. | 200 `{"status":"ok","version":"0.4.0"}`. |
 | `POST /api/sessions` | JSON `{"mode":"demo"}` or `{"mode":"live"}`. | 201 `{"sessionId":"...","participantToken":"...","role":"host","mode":"demo"}`. |
 | `POST /api/sessions/{sessionId}/join` | JSON `{}`. | 201 `{"sessionId":"...","participantToken":"...","role":"guest","mode":"demo"}`. |
 | `GET /api/sessions/{sessionId}` | Bearer token, no body. | 200 `Snapshot`. |
@@ -79,4 +81,4 @@ Both connected roles receive `peer`, `transcript`, `assessment`, and `provider_s
 
 ## Scripts and verification contract
 
-The frontend package lives in `frontend/` and exposes `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e`. Backend checks run at the repository root with `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`. End-to-end testing uses two separate browser contexts and keyless demo text; provider calls remain untested without explicit safe credentials. Version the new feature `0.2.0` in Python and frontend metadata when those files are implemented.
+The frontend package lives in `frontend/` and exposes `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e`. Backend checks run at the repository root with `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`. End-to-end testing uses two separate browser contexts and keyless demo text; provider calls remain untested without explicit safe credentials. Version this extension `0.4.0` in Python and frontend metadata.

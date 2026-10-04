@@ -2,7 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, enter } from "./api";
 import { ClipRecorder } from "./recorder";
 import { Room, type RoomConnection } from "./room";
-import type { Membership, Snapshot } from "./protocol";
+import {
+  DefenseWarning,
+  SafetyReview,
+  TrustedContactSettings,
+} from "./Defense";
+import type { Membership, Snapshot, TrustedContact } from "./protocol";
 import { Transcript, type TranscriptHandle } from "./Transcript";
 import { Assessment } from "./Assessment";
 import { assessmentView } from "./assessment-view";
@@ -50,14 +55,50 @@ export default function App() {
   const active = screen.kind === "call" ? screen : null;
   const snapshot = active?.snapshot ?? null;
   const closed = Boolean(active && active.session.kind !== "open");
+  const hold = !closed ? (snapshot?.defense?.lockout ?? null) : null;
+  const safetyPaused = hold !== null;
   const sessionEnabled = Boolean(
-    active && !closed && snapshot && roomConnection === "connected",
+    active &&
+      !closed &&
+      !safetyPaused &&
+      snapshot &&
+      roomConnection === "connected",
   );
   const review = assessmentView(snapshot, {
     connection: roomConnection,
     ended: closed,
   });
   const transcriptionSupported = ClipRecorder.supported();
+  useEffect(() => {
+    room.current?.setSafetyPaused(safetyPaused);
+    if (remoteAudio.current) remoteAudio.current.muted = safetyPaused;
+    if (safetyPaused) {
+      recorder.current?.stop();
+      recorder.current = null;
+      setRecording(false);
+      confirmation.current?.close();
+    }
+  }, [safetyPaused]);
+
+  async function saveContact(contact: TrustedContact | null) {
+    const instance = room.current;
+    if (!instance || closed) throw new Error("Room is not available.");
+    await instance.updateContact(contact);
+  }
+
+  async function acknowledge(id: string) {
+    const instance = room.current;
+    if (!instance || closed)
+      throw new Error("Room is not available. You may end the call.");
+    const next = await instance.acknowledge(id);
+    if (room.current !== instance) return;
+    if (next.lockout?.id === id)
+      throw new Error(
+        "The review changed while saving. Try acknowledging again.",
+      );
+    if (!next.lockout)
+      transcript.current?.jumpTo(snapshot?.segments.at(-1)?.id ?? "");
+  }
 
   useEffect(() => {
     if (screen.kind === "call" || screen.kind === "lobby")
@@ -391,6 +432,18 @@ export default function App() {
               </button>
             </section>
           )}
+          <DefenseWarning
+            defense={snapshot?.defense}
+            current={review.kind === "ready"}
+            evidence={
+              snapshot?.segments.filter(
+                (segment) =>
+                  review.kind === "ready" &&
+                  review.evidence.some((item) => item.id === segment.id),
+              ) ?? []
+            }
+            onEvidence={(id) => transcript.current?.jumpTo(id)}
+          />
           <div className="call-grid">
             <div className="conversation panel">
               <Transcript
@@ -416,7 +469,7 @@ export default function App() {
                       value={text}
                       onChange={(event) => setText(event.target.value)}
                       placeholder="Type what was said…"
-                      disabled={closed}
+                      disabled={closed || safetyPaused}
                       aria-describedby="typed-help"
                       autoComplete="off"
                     />
@@ -485,6 +538,7 @@ export default function App() {
                   ref={remoteAudio}
                   autoPlay
                   playsInline
+                  muted={safetyPaused}
                   aria-label="Remote participant audio"
                 />
                 <div className="controls">
@@ -501,7 +555,7 @@ export default function App() {
                   ) : (
                     <button
                       type="button"
-                      disabled={closed}
+                      disabled={closed || safetyPaused}
                       onClick={() => {
                         const muted = microphone === "on";
                         room.current?.setMuted(muted);
@@ -518,6 +572,7 @@ export default function App() {
                       type="button"
                       disabled={
                         closed ||
+                        safetyPaused ||
                         (!recording &&
                           (!sessionEnabled ||
                             !transcriptionSupported ||
@@ -556,6 +611,13 @@ export default function App() {
                         : "Transcription unavailable"}
                   </p>
                 )}
+                {snapshot?.defense && (
+                  <TrustedContactSettings
+                    contact={snapshot.defense.trustedContact}
+                    enabled={!closed && roomConnection === "connected"}
+                    onSave={saveContact}
+                  />
+                )}
               </div>
             </div>
             <Assessment
@@ -565,6 +627,15 @@ export default function App() {
               jumpTo={(id) => transcript.current?.jumpTo(id)}
             />
           </div>
+          {hold && (
+            <SafetyReview
+              key={hold.id}
+              hold={hold}
+              segments={snapshot?.segments ?? []}
+              onContinue={acknowledge}
+              onEnd={leave}
+            />
+          )}
           <dialog
             ref={confirmation}
             className="end-dialog"

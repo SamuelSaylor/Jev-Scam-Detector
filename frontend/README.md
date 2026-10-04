@@ -1,6 +1,6 @@
 # Jev call web
 
-The React app is version 0.3.3. From `frontend/`, run `npm install` and `npm run dev`. Start FastAPI separately on `127.0.0.1:8000`. Vite proxies REST and WebSocket requests under `/api`. Production uses same-origin requests; deploy behind HTTPS with WebSocket upgrades enabled.
+The React app is version 0.4.0. From `frontend/`, run `npm install` and `npm run dev`. Start FastAPI separately on `127.0.0.1:8000`. Vite proxies REST and WebSocket requests under `/api`. Production uses same-origin requests; deploy behind HTTPS with WebSocket upgrades enabled.
 
 ## Live rooms
 
@@ -15,6 +15,14 @@ The shared transcript uses local/right and remote/left bubbles with server recei
 The risk rail is vertical on desktop and horizontal on mobile. The black panels use red header strips, outlines, and solid meter fills; readable text stays off-white with yellow keyboard focus. The UI omits instructional captions, repeated assessment commentary, decorative footer text, and implementation caveats. Risk freshness, timestamps, sources, and the verdict qualification stay visible. Only a returned current risk is shown as current. Pending review, provider outage, room connection loss, and ended calls keep previous scores explicitly historical. Assessment timestamps come from the backend. Explanations and confidence are not supplied by the API and are not synthesized. Bands are presentation categories, not validated thresholds.
 
 Ending the call requires confirmation and ends the room for both participants. The transcript remains visible in the browser until **Back to rooms**. If the end request fails, the UI distinguishes local disconnection from server-confirmed termination. Room connection state, peer seat presence, and audio health are separate.
+
+## Tiered defense
+
+Live Jev assessments now include typed line indicators and evidence-rating confidence. The server accumulates risk with bounded increases/decay and remembers up to 32 recent decisions. This policy score is not a calibrated probability of fraud. Thresholds and weights are unvalidated product settings documented in `../docs/tiered-defense-contract.md`.
+
+Below 50%, no scam notification appears. At 50%, the app shows a nonblocking caution with backend-supplied reasons. At 70%, it prompts a trusted-contact review. Contact settings are private to your seat; the email action opens your email client with an optional draft and never claims automatic delivery. At 85%, sufficiently confident reinforcing evidence pauses in-app audio, transcription, and submissions. A server-enforced five-second hold requires an explicit acknowledgment, logged privately for the session. Same acknowledged evidence cannot impose another hold; new high-risk evidence can. Transcription never restarts automatically. The app cannot block outside conversations or police peer media beyond its own browser controls.
+
+The frontend still accepts old snapshots for migration but never fabricates confidence or lockouts from legacy scores. Demo sessions remain test-only and do not enforce tiers. Provider credentials stay server-side. Override records, contact details, and risk history share the room's in-memory TTL, not permanent storage.
 
 ## Deployment
 

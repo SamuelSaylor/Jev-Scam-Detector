@@ -43,10 +43,36 @@ class Transcription:
     text: str
 
 
+IndicatorKind = Literal[
+    "urgency",
+    "payment",
+    "credentials",
+    "unverified_link",
+    "platform_switch",
+    "independent_verification",
+]
+
+
+@dataclass(frozen=True)
+class Indicator:
+    segment_id: str
+    kind: IndicatorKind
+    probability: float
+
+    def wire(self) -> dict[str, object]:
+        return {
+            "segmentId": self.segment_id,
+            "kind": self.kind,
+            "probability": self.probability,
+        }
+
+
 @dataclass(frozen=True)
 class AssessmentDecision:
     risk: float
     evidence_segment_ids: tuple[str, ...]
+    confidence: float | None = None
+    indicators: tuple[Indicator, ...] = ()
 
 
 class Transcriber(Protocol):

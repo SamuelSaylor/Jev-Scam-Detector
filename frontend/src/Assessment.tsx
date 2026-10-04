@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useAnimatedRisk } from "./useAnimatedRisk";
 import {
   assessmentCopy,
   percentage,
@@ -21,19 +21,10 @@ export function Assessment({
   const evidence = view.kind === "ready" ? view.evidence : view.earlierEvidence;
   const copy = assessmentCopy(mode, view);
   const current = view.kind === "ready" ? view.risk : null;
-  const previousId = useRef<string | undefined>(undefined);
-  const [fill, setFill] = useState({ amount: 0, animate: false });
-  useLayoutEffect(() => {
-    if (current === null) {
-      setFill({ amount: 0, animate: false });
-      return;
-    }
-    setFill({
-      amount: current * 100,
-      animate: previousId.current !== view.latest?.id,
-    });
-    previousId.current = view.latest?.id;
-  }, [current, view.latest?.id]);
+  const accumulated =
+    view.latest?.rawRisk !== undefined && view.latest.confidence != null;
+  const displayed = useAnimatedRisk(current, view.latest?.id);
+  const fill = { amount: displayed, animate: false };
   const band =
     current === null
       ? "unknown"
@@ -53,17 +44,23 @@ export function Assessment({
         className={`likelihood panel band-${band} ${view.kind === "ready" ? "is-ready" : "is-neutral"}`}
         aria-labelledby="risk-title"
       >
-        <h2 id="risk-title">SCAM CHANCE</h2>
+        <h2 id="risk-title">{accumulated ? "SCAM RISK" : "SCAM CHANCE"}</h2>
         <span className="stamp risk-state">
           {view.kind === "ready" ? "CURRENT" : copy.likelihood.toUpperCase()}
         </span>
         <strong className="likelihood-value">
-          {view.kind === "ready" ? copy.likelihood : "No estimate"}
+          {view.kind === "ready" ? `${Math.round(displayed)}%` : "No estimate"}
         </strong>
         <div
           className="risk-gauge"
           role={current !== null ? "meter" : undefined}
-          aria-label={current !== null ? "Estimated scam chance" : undefined}
+          aria-label={
+            current !== null
+              ? accumulated
+                ? "Accumulated scam risk"
+                : "Estimated scam chance"
+              : undefined
+          }
           aria-valuemin={current !== null ? 0 : undefined}
           aria-valuemax={current !== null ? 100 : undefined}
           aria-valuenow={
@@ -102,6 +99,8 @@ export function Assessment({
         <p className="qualification">
           Estimate based on the latest completed assessment; not a confirmed
           scam verdict.
+          {accumulated &&
+            " Accumulated policy score, not a calibrated fraud probability."}
         </p>
         {mode === "demo" && (
           <p className="demo-label">DEMO RULE · Not live Jev.</p>
@@ -139,6 +138,16 @@ export function Assessment({
                 · {view.latest.provider}
               </p>
             )}
+            {view.latest &&
+              view.latest.confidence !== undefined &&
+              view.latest.confidence !== null && (
+                <p className="assessment-confidence">
+                  Model confidence · {percentage(view.latest.confidence)}
+                  <span className="confidence-note">
+                    Evidence-rating certainty, not proof of fraud.
+                  </span>
+                </p>
+              )}
             {view.kind !== "ready" && (
               <p className="review-description">{copy.sentence}</p>
             )}

@@ -68,7 +68,10 @@ describe("wire event boundary", () => {
   it("ignores self peer broadcasts and tracks the remote seat", () => {
     const self = decodeEvent(
       JSON.stringify({
-        type: "peer", role: "host", joined: true, connected: true,
+        type: "peer",
+        role: "host",
+        joined: true,
+        connected: true,
       }),
     );
     expect(updatedSnapshot(base, self).peer).toEqual({
@@ -78,7 +81,10 @@ describe("wire event boundary", () => {
     });
     const remote = decodeEvent(
       JSON.stringify({
-        type: "peer", role: "guest", joined: true, connected: true,
+        type: "peer",
+        role: "guest",
+        joined: true,
+        connected: true,
       }),
     );
     expect(updatedSnapshot(base, remote).peer).toEqual({
@@ -86,6 +92,65 @@ describe("wire event boundary", () => {
       joined: true,
       connected: true,
     });
+  });
+  it("validates private defense and real confidence, preserving holds across pending review", () => {
+    const defenseEvent = decodeEvent(
+      JSON.stringify({
+        type: "defense",
+        defense: {
+          tier: "lockout",
+          reasons: ["A request for payment."],
+          trustedContact: null,
+          lockout: {
+            id: "hold_a",
+            assessmentId: "a",
+            risk: 0.9,
+            confidence: 0.95,
+            reasons: ["A request for payment."],
+            evidenceSegmentIds: ["one"],
+            createdAt: "2026-01-01T00:00:05Z",
+            readyAt: "2026-01-01T00:00:10Z",
+          },
+          overrides: [],
+        },
+      }),
+    );
+    const held = updatedSnapshot(base, defenseEvent);
+    expect(held.defense?.lockout?.id).toBe("hold_a");
+    expect(
+      updatedSnapshot(
+        held,
+        decodeEvent(JSON.stringify({ type: "transcript", segment })),
+      ).defense?.lockout?.id,
+    ).toBe("hold_a");
+    expect(() =>
+      decodeEvent(
+        JSON.stringify({
+          type: "assessment",
+          assessment: {
+            ...assessment,
+            confidence: 1.1,
+            indicators: [],
+            rawRisk: 0.9,
+          },
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      decodeEvent(
+        JSON.stringify({
+          type: "assessment",
+          assessment: {
+            ...assessment,
+            confidence: 0.8,
+            indicators: [
+              { segmentId: "one", kind: "invented", probability: 0.9 },
+            ],
+            rawRisk: 0.9,
+          },
+        }),
+      ),
+    ).toThrow();
   });
   it("marks a newer line unassessed, deduplicates repeated events, and does not turn unavailable into safety", () => {
     const textEvent = decodeEvent(
