@@ -173,7 +173,6 @@ export default function App() {
 
   const active = screen.kind === "call" ? screen : null;
   const snapshot = active?.snapshot;
-  const latest = snapshot?.assessments.at(-1);
   const review = assessmentView(snapshot ?? null);
 
   return (
@@ -194,13 +193,24 @@ export default function App() {
       {active ? (
         <main className="call-layout">
           <section className="call-header" aria-label="Call details">
-            <p className="context stamp">{active.member.mode === "demo" ? "Demo mode" : "Live mode"} · 2 seats</p>
+            <p className="context stamp">
+              {active.member.mode === "demo" ? "Demo mode" : "Live mode"} · 2
+              seats
+            </p>
             <h1>On the call</h1>
             <div className="room-ticket">
-              <span>Room ID to share</span>
               <strong aria-label="Room ID">{active.member.sessionId}</strong>
-              <button type="button" onClick={() => void navigator.clipboard.writeText(active.member.sessionId).then(() => setMessage("Room ID copied.")).catch(() => setMessage("Copy the room ID shown above."))}>Copy room ID</button>
-              <small>Share this ID only. Never share a participant token.</small>
+              <button
+                type="button"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(active.member.sessionId)
+                    .then(() => setMessage("Room ID copied."))
+                    .catch(() => setMessage("Copy the room ID shown above."))
+                }
+              >
+                Copy room ID
+              </button>
             </div>
           </section>
           {message && (
@@ -320,20 +330,32 @@ export default function App() {
               </div>
               <p className="privacy">
                 {active.member.mode === "demo"
-                  ? "Demo mode. Microphone audio goes only to the other browser if you connect it. No microphone audio is uploaded or transcribed."
+                  ? "Demo audio goes only to the other caller. It isn't uploaded or transcribed. Only typed text is reviewed."
                   : "Live mode. Audio is uploaded in complete five-second clips only when you start live transcription."}
               </p>
-              {active.member.mode === "live" && snapshot?.providerStatus.transcription === "unavailable" && <p className="privacy" role="status">Transcription provider unavailable. Typed lines still work.</p>}
+              {active.member.mode === "live" &&
+                snapshot?.providerStatus.transcription === "unavailable" && (
+                  <p className="privacy" role="status">
+                    Transcription provider unavailable. Typed lines still work.
+                  </p>
+                )}
             </div>
             <div className="conversation">
-              <Transcript ref={transcript} segments={snapshot?.segments ?? []} role={active.member.role} evidenceIds={latest?.evidenceSegmentIds ?? []} />
+              <Transcript
+                ref={transcript}
+                segments={snapshot?.segments ?? []}
+                role={active.member.role}
+                evidenceIds={
+                  review.kind === "ready"
+                    ? review.evidence.map((line) => line.id)
+                    : []
+                }
+              />
               <form
                 className="text-form"
                 onSubmit={(event) => void submit(event)}
               >
-                <label htmlFor="typed-line">
-                  Add a line to the shared timeline
-                </label>
+                <label htmlFor="typed-line">Add a typed line</label>
                 <div>
                   <input
                     id="typed-line"
@@ -346,12 +368,14 @@ export default function App() {
                     Add typed line
                   </button>
                 </div>
-                <small>
-                  Manual text is labeled as typed, never as a recording.
-                </small>
               </form>
             </div>
-            <Assessment view={review} mode={active.member.mode} role={active.member.role} jumpTo={(id) => transcript.current?.jumpTo(id)} />
+            <Assessment
+              view={review}
+              mode={active.member.mode}
+              role={active.member.role}
+              jumpTo={(id) => transcript.current?.jumpTo(id)}
+            />
           </div>
         </main>
       ) : (
@@ -371,7 +395,10 @@ export default function App() {
             <p className="lede">
               Make a private room for two people. Talk and review shared text.
             </p>
-            <p className="demo-note">Demo uses a sample rule on typed text. Live requires server providers.</p>
+            <p className="demo-note">
+              Demo uses a sample rule on typed text. Live requires server
+              providers.
+            </p>
           </div>
           <form className="entry" onSubmit={(event) => void join(event)}>
             <h2>Start or join</h2>
