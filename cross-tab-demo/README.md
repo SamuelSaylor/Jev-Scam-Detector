@@ -29,3 +29,20 @@ Without the model the call still works; the transcript feed shows a notice.
   changing `MODEL_PATH` in `server.py`.
 - Rooms hold two people. Audio is sent in ~256 ms chunks, Vosk closes an
   utterance on a pause in speech, and a person's recognizer is released when they leave.
+
+## Deploy (free, Hugging Face Spaces)
+
+The **Deploy cross-tab demo** workflow (Actions tab, "Run workflow") runs lint,
+type check and tests, builds the Docker image, pushes it to a Space, and waits
+until the Space responds. One-time setup:
+
+1. Create a free account at https://huggingface.co and a **new Space** with the
+   **Docker** SDK (blank template). Leave it empty.
+2. Create a token at https://huggingface.co/settings/tokens with **write** access.
+3. In the GitHub repo, go to Settings > Secrets and variables > Actions:
+   - secret `HF_TOKEN` = the token
+   - variable `HF_SPACE` = `your-username/your-space-name`
+4. Run the workflow. The app is then at `https://your-username-your-space-name.hf.space`.
+
+Calls use public STUN only (no TURN relay), so a few strict networks may fail
+to connect peer to peer.

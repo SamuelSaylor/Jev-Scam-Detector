@@ -1,0 +1,2 @@
+fastapi[standard]>=0.142.2
+vosk>=0.3.45
