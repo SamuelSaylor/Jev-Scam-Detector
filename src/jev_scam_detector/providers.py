@@ -39,49 +39,45 @@ class TranscriptionResponse(BaseModel):
 
 class DemoAssessor:
     async def assess(self, segments: tuple[Segment, ...]) -> AssessmentDecision:
+        strong_indicators = {c.indicator for c in CRITERIA if c.strong}
         findings: dict[str, set[Indicator]] = {}
-        previous: dict[Role, Segment] = {}
-        challenged: set[Role] = set()
+        last_risky_by_speaker: dict[Role, Segment] = {}
+        challenged_speakers: set[Role] = set()
         for segment in segments:
             text = segment.text.casefold().replace("’", "'")
             if DEMO_REFUSAL.search(text):
-                challenged.update(role for role in previous if role != segment.speaker)
-            hits: set[Indicator] = set()
-            for clause in re.split(r"[.!?;]", text):
-                if DEMO_SAFETY_CONTEXT.search(clause):
-                    continue
-                hits.update(
-                    c.indicator
-                    for c in CRITERIA
-                    if any(re.search(pattern, clause) for pattern in c.demo_patterns)
+                challenged_speakers.update(
+                    role for role in last_risky_by_speaker if role != segment.speaker
                 )
-            risky = any(c.strong and c.indicator in hits for c in CRITERIA)
-            prior = previous.get(segment.speaker)
-            if Indicator.STORY_CHANGE in hits and not (risky and prior):
-                hits.remove(Indicator.STORY_CHANGE)
+            hits = {
+                c.indicator
+                for clause in re.split(r"[.!?;]", text)
+                if not DEMO_SAFETY_CONTEXT.search(clause)
+                for c in CRITERIA
+                if any(re.search(pattern, clause) for pattern in c.demo_patterns)
+            }
+            risky = not strong_indicators.isdisjoint(hits)
+            prior = last_risky_by_speaker.get(segment.speaker)
+            if not (risky and prior):
+                hits.discard(Indicator.STORY_CHANGE)
             if risky:
                 if (
                     prior
                     and prior.text != segment.text
-                    and segment.speaker in challenged
+                    and segment.speaker in challenged_speakers
                 ):
                     hits.add(Indicator.PERSISTENCE)
-                previous[segment.speaker] = segment
+                last_risky_by_speaker[segment.speaker] = segment
             if hits:
                 findings[segment.id] = hits
-        indicators = tuple(
-            c.indicator
-            for c in CRITERIA
-            if any(c.indicator in h for h in findings.values())
-        )
-        strong = any(c.strong and c.indicator in indicators for c in CRITERIA)
-        risk = (
-            0.9
-            if strong or len(indicators) >= 3
-            else 0.5
-            if len(indicators) >= 2
-            else 0.1
-        )
+        detected = {indicator for hits in findings.values() for indicator in hits}
+        indicators = tuple(c.indicator for c in CRITERIA if c.indicator in detected)
+        if not strong_indicators.isdisjoint(detected) or len(indicators) >= 3:
+            risk = 0.9
+        elif len(indicators) >= 2:
+            risk = 0.5
+        else:
+            risk = 0.1
         return AssessmentDecision(risk, tuple(findings), indicators=indicators)
 
 

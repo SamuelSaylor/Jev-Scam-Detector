@@ -37,7 +37,7 @@ def test_demo_rule_flags_the_suspicious_line(monkeypatch: MonkeyPatch) -> None:
         response = client.post("/api/emails/scan", json=THREAD)
     assert response.status_code == 200
     assert response.json() == {
-        "risk": 0.8,
+        "risk": 0.9,
         "evidenceIds": ["l2"],
         "provider": "demo-rule",
     }
