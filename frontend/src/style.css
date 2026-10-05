@@ -78,37 +78,14 @@ button:not(:disabled):active {
   position: relative;
 }
 
-.shell::before,
-.shell::after {
+.shell::before {
   content: "";
   position: fixed;
   pointer-events: none;
   z-index: 4;
-}
-
-.shell::before {
   inset: 0 auto 0 0;
-  width: 18px;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      var(--red) 0 18px,
-      var(--ink) 18px 28px
-    );
-}
-
-.shell::after {
-  right: -30px;
-  top: 18%;
-  width: 120px;
-  height: 64vh;
-  background: repeating-linear-gradient(
-    -18deg,
-    var(--red) 0 16px,
-    transparent 16px 32px
-  );
-  opacity: 0.55;
-  transform: skewY(-8deg);
+  width: 4px;
+  background: var(--red);
 }
 
 .topbar {
@@ -125,24 +102,9 @@ button:not(:disabled):active {
 .top-slash {
   position: absolute;
   inset: 0 -20% 0 55%;
-  background: repeating-linear-gradient(
-    -32deg,
-    var(--red) 0 12px,
-    var(--ink) 12px 24px
-  );
+  background: var(--red-deep);
   clip-path: polygon(18% 0, 100% 0, 100% 100%, 0 100%);
   transform: skewX(-18deg);
-  animation: slash-shift 1.8s steps(2) infinite;
-}
-
-@keyframes slash-shift {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.25);
-  }
 }
 
 .brand {
@@ -1200,10 +1162,6 @@ footer span {
     display: none;
   }
 
-  .shell::after {
-    display: none;
-  }
-
   .ghost-copy {
     font-size: 96px;
   }
@@ -1558,9 +1516,6 @@ footer span {
 .explanation .guidance strong {
   display: block;
   color: var(--red-deep);
-}
-.shell:has(.call-layout)::after {
-  display: none;
 }
 @media (min-width: 851px) and (min-height: 701px) {
   .shell:has(.call-layout) {
