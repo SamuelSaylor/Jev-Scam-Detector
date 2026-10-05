@@ -18,6 +18,12 @@ Samuel Saylor · Simon Teague · Neil Parker · Nicolas Powell
 
 ---
 
+**Video Demo**
+
+<video src="RHXIIVid.mp4" width="100%" controls title="Video Title"></video>    
+
+---
+
 A two-person browser call with a shared transcript and periodic text-based risk review. The no-key demo uses typed lines and a sample word-matching rule. You can connect microphones for peer-to-peer audio without uploading or transcribing it. This is a demonstration, not a calibrated scam verdict or caller-identity check.
 
 Created for RowdyHacks 2026 by Samuel Saylor, Simon Teague, Neil Parker, and Nicolas Powell.
